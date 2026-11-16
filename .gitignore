@@ -1,0 +1,37 @@
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# User video & subtitle outputs
+*.mp4
+*.mov
+*.webm
+*.ass
+*.srt
+*.vtt
+*.png
+*.jpg
+*.jpeg
+web_preview.*
+preview_test.*
+test_clip*
+frame_*
+
+# HuggingFace & Torch cache
+.cache/
+models/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

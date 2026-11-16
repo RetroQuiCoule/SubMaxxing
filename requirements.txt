@@ -1,0 +1,13 @@
+# Submaxxing - TikTok Subtitle Studio Requirements
+# Core Whisper & GPU Runtime
+faster-whisper>=1.0.0
+ctranslate2>=4.0.0
+av>=11.0.0
+tqdm>=4.60.0
+huggingface-hub>=0.20.0
+tokenizers>=0.13.0
+
+# NVIDIA CUDA 12 & cuDNN runtimes for GPU acceleration on Windows/Linux
+nvidia-cublas-cu12>=12.0.0
+nvidia-cudnn-cu12>=9.0.0
+nvidia-cuda-nvrtc-cu12>=12.0.0
