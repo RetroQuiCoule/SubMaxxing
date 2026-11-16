@@ -7,6 +7,7 @@ Generates dynamic, animated, bite-sized subtitles with highlight, bounce, and gl
 import os
 import sys
 import argparse
+import tempfile
 from styles import PRESETS, SubStylePreset, chunks_to_ass
 from chunker import srt_to_chunks
 from renderer import (
@@ -64,6 +65,7 @@ Presets available:
     parser.add_argument("--overlay-only", action="store_true", help="Only generate transparent ProRes overlay")
     parser.add_argument("--overlay-format", choices=["mov", "webm"], default="mov", help="Overlay format (mov or webm)")
     parser.add_argument("--ass-only", action="store_true", help="Only output the generated .ass subtitle file")
+    parser.add_argument("--export-subs", "--keep-subs", dest="export_subs", action="store_true", help="Also export raw .srt and .ass subtitle files next to video (clean by default)")
     parser.add_argument("--no-cache", action="store_true", help="Force recalculating Whisper transcription, ignoring cache")
     parser.add_argument("-o", "--output", help="Custom output video path")
 
@@ -74,101 +76,117 @@ Presets available:
         sys.exit(1)
 
     base_name = os.path.splitext(args.video)[0]
-    ass_path = f"{base_name}_submaxxing.ass"
-
-    # Step 1: Video Metadata
-    print(f"[*] Reading video metadata: '{args.video}'...")
-    vinfo = get_video_info(args.video)
-    width = vinfo["width"]
-    height = vinfo["height"]
-    duration = vinfo["duration"]
-    fps = vinfo["fps"]
-    print(f"    Resolution: {width}x{height} | Duration: {duration:.2f}s | FPS: {fps:.2f}")
-
-    # Step 2: Obtain Chunks (Whisper or SRT)
-    if args.transcribe or not args.srt:
-        if not args.srt:
-            print("[*] No --srt provided, triggering local Whisper transcription...")
-        from transcriber import transcribe_video
-        chunks, srt_content = transcribe_video(
-            media_path=args.video,
-            model_name=args.model,
-            language=None if args.lang == "auto" else args.lang,
-            max_words=args.words_per_chunk,
-            use_cache=not args.no_cache
-        )
-        generated_srt_path = f"{base_name}_transcribed.srt"
-        with open(generated_srt_path, "w", encoding="utf-8") as f:
-            f.write(srt_content)
-        print(f"[+] Saved generated SRT to: '{generated_srt_path}'")
+    temp_ass_path = None
+    if args.export_subs or args.ass_only:
+        ass_path = f"{base_name}_submaxxing.ass"
     else:
-        if not os.path.exists(args.srt):
-            print(f"[!] Error: SRT file not found: {args.srt}")
+        temp_fd, temp_ass_path = tempfile.mkstemp(suffix="_submaxxing.ass")
+        os.close(temp_fd)
+        ass_path = temp_ass_path
+
+    try:
+        # Step 1: Video Metadata
+        print(f"[*] Reading video metadata: '{args.video}'...")
+        vinfo = get_video_info(args.video)
+        width = vinfo["width"]
+        height = vinfo["height"]
+        duration = vinfo["duration"]
+        fps = vinfo["fps"]
+        print(f"    Resolution: {width}x{height} | Duration: {duration:.2f}s | FPS: {fps:.2f}")
+
+        # Step 2: Obtain Chunks (Whisper or SRT)
+        if args.transcribe or not args.srt:
+            if not args.srt:
+                print("[*] No --srt provided, triggering local Whisper transcription...")
+            from transcriber import transcribe_video
+            chunks, srt_content = transcribe_video(
+                media_path=args.video,
+                model_name=args.model,
+                language=None if args.lang == "auto" else args.lang,
+                max_words=args.words_per_chunk,
+                use_cache=not args.no_cache
+            )
+            if args.export_subs:
+                generated_srt_path = f"{base_name}_transcribed.srt"
+                with open(generated_srt_path, "w", encoding="utf-8") as f:
+                    f.write(srt_content)
+                print(f"[+] Saved generated SRT to: '{generated_srt_path}'")
+        else:
+            if not os.path.exists(args.srt):
+                print(f"[!] Error: SRT file not found: {args.srt}")
+                sys.exit(1)
+            print(f"[*] Parsing and slicing SRT: '{args.srt}' (max {args.words_per_chunk} words/chunk)...")
+            chunks = srt_to_chunks(args.srt, max_words=args.words_per_chunk, is_file=True)
+            print(f"[+] Sliced into {len(chunks)} digestible chunks.")
+
+        if not chunks:
+            print("[!] Error: No subtitles found or generated.")
             sys.exit(1)
-        print(f"[*] Parsing and slicing SRT: '{args.srt}' (max {args.words_per_chunk} words/chunk)...")
-        chunks = srt_to_chunks(args.srt, max_words=args.words_per_chunk, is_file=True)
-        print(f"[+] Sliced into {len(chunks)} digestible chunks.")
 
-    if not chunks:
-        print("[!] Error: No subtitles found or generated.")
-        sys.exit(1)
-
-    # Step 3: Configure Style Preset & Overrides
-    preset = PRESETS.get(args.style, PRESETS["hormozi"])
-    active_style = SubStylePreset(
-        name=preset.name,
-        font_name=args.font or preset.font_name,
-        font_size=args.font_size or preset.font_size,
-        primary_color=args.primary_color or preset.primary_color,
-        highlight_color=args.highlight_color or preset.highlight_color,
-        outline_color=args.outline_color or preset.outline_color,
-        outline_width=args.outline_width if args.outline_width is not None else preset.outline_width,
-        shadow_color=args.shadow_color or preset.shadow_color,
-        shadow_depth=args.shadow_depth if args.shadow_depth is not None else preset.shadow_depth,
-        blur=args.glow if args.glow is not None else preset.blur,
-        all_caps=False if args.no_caps else preset.all_caps,
-        animation=args.animation or preset.animation,
-        anim_speed_ms=args.anim_speed or preset.anim_speed_ms,
-        anim_scale=args.anim_scale or preset.anim_scale,
-        margin_v=args.pos_y or preset.margin_v
-    )
-
-    # Step 4: Generate ASS
-    print(f"[*] Generating ASS subtitles (Style: {active_style.name}, Animation: {active_style.animation})...")
-    ass_content = chunks_to_ass(chunks, active_style, play_res_x=width, play_res_y=height)
-    with open(ass_path, "w", encoding="utf-8") as f:
-        f.write(ass_content)
-    print(f"[+] ASS file created: '{ass_path}'")
-
-    if args.ass_only:
-        print("[+] --ass-only specified. Done!")
-        return
-
-    # Step 5: Render
-    if args.overlay_only or args.overlay:
-        ext = "mov" if args.overlay_format == "mov" else "webm"
-        overlay_out = f"{base_name}_overlay.{ext}"
-        render_transparent_overlay(
-            ass_path=ass_path,
-            output_path=overlay_out,
-            duration=duration,
-            width=width,
-            height=height,
-            fps=fps,
-            format_type=args.overlay_format
+        # Step 3: Configure Style Preset & Overrides
+        preset = PRESETS.get(args.style, PRESETS["hormozi"])
+        active_style = SubStylePreset(
+            name=preset.name,
+            font_name=args.font or preset.font_name,
+            font_size=args.font_size or preset.font_size,
+            primary_color=args.primary_color or preset.primary_color,
+            highlight_color=args.highlight_color or preset.highlight_color,
+            outline_color=args.outline_color or preset.outline_color,
+            outline_width=args.outline_width if args.outline_width is not None else preset.outline_width,
+            shadow_color=args.shadow_color or preset.shadow_color,
+            shadow_depth=args.shadow_depth if args.shadow_depth is not None else preset.shadow_depth,
+            blur=args.glow if args.glow is not None else preset.blur,
+            all_caps=False if args.no_caps else preset.all_caps,
+            animation=args.animation or preset.animation,
+            anim_speed_ms=args.anim_speed or preset.anim_speed_ms,
+            anim_scale=args.anim_scale or preset.anim_scale,
+            margin_v=args.pos_y or preset.margin_v
         )
-        if args.overlay_only:
-            print("[+] Transparent overlay generated successfully!")
+
+        # Step 4: Generate ASS
+        print(f"[*] Generating ASS subtitles (Style: {active_style.name}, Animation: {active_style.animation})...")
+        ass_content = chunks_to_ass(chunks, active_style, play_res_x=width, play_res_y=height)
+        with open(ass_path, "w", encoding="utf-8") as f:
+            f.write(ass_content)
+        if args.export_subs or args.ass_only:
+            print(f"[+] ASS file created: '{ass_path}'")
+
+        if args.ass_only:
+            print("[+] --ass-only specified. Done!")
             return
 
-    final_output = args.output or f"{base_name}_subbed.mp4"
-    render_subtitles_to_video(
-        video_path=args.video,
-        ass_path=ass_path,
-        output_path=final_output,
-        use_gpu=True
-    )
-    print(f"\n🎉 SUCCESS: Video rendered successfully to '{final_output}'!")
+        # Step 5: Render
+        if args.overlay_only or args.overlay:
+            ext = "mov" if args.overlay_format == "mov" else "webm"
+            overlay_out = f"{base_name}_overlay.{ext}"
+            render_transparent_overlay(
+                ass_path=ass_path,
+                output_path=overlay_out,
+                duration=duration,
+                width=width,
+                height=height,
+                fps=fps,
+                format_type=args.overlay_format
+            )
+            if args.overlay_only:
+                print("[+] Transparent overlay generated successfully!")
+                return
+
+        final_output = args.output or f"{base_name}_subbed.mp4"
+        render_subtitles_to_video(
+            video_path=args.video,
+            ass_path=ass_path,
+            output_path=final_output,
+            use_gpu=True
+        )
+        print(f"\n🎉 SUCCESS: Video rendered successfully to '{final_output}'!")
+
+    finally:
+        if temp_ass_path and os.path.exists(temp_ass_path):
+            try:
+                os.remove(temp_ass_path)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

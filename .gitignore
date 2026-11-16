@@ -21,6 +21,8 @@ __pycache__/
 *.png
 *.jpg
 *.jpeg
+*.submaxxing_cache.json
+*.cmd
 web_preview.*
 preview_test.*
 test_clip*

@@ -113,11 +113,25 @@ def _get_cache_key(media_path: str, language: Optional[str], model_name: str) ->
         return f"{media_path}:{language or 'auto'}:{model_name}"
 
 
+def _get_cache_dir() -> str:
+    """Returns the central cache directory for Submaxxing to keep media folders clean."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+        cache_dir = os.path.join(base, "Submaxxing", "cache")
+    else:
+        cache_dir = os.path.expanduser("~/.cache/submaxxing")
+    os.makedirs(cache_dir, exist_ok=True)
+    return cache_dir
+
+
 def _get_disk_cache_path(media_path: str) -> str:
-    """Returns the persistent JSON cache file path alongside the media file."""
-    base_dir = os.path.dirname(os.path.abspath(media_path))
-    file_name = os.path.basename(media_path)
-    return os.path.join(base_dir, f".{file_name}.submaxxing_cache.json")
+    """Returns the persistent JSON cache file path in the centralized app cache directory."""
+    cache_dir = _get_cache_dir()
+    media_abs = os.path.abspath(media_path)
+    base_name = os.path.splitext(os.path.basename(media_path))[0]
+    safe_name = "".join(c for c in base_name if c.isalnum() or c in ("-", "_"))[:30] or "media"
+    path_hash = hashlib.sha256(media_abs.encode("utf-8")).hexdigest()[:16]
+    return os.path.join(cache_dir, f"{safe_name}_{path_hash}.json")
 
 
 def load_cached_timings(media_path: str, language: Optional[str], model_name: str) -> Optional[Tuple[List[WordTiming], str]]:
@@ -127,17 +141,35 @@ def load_cached_timings(media_path: str, language: Optional[str], model_name: st
         return _TRANSCRIPTION_MEMORY_CACHE[key]
 
     cache_file = _get_disk_cache_path(media_path)
-    if os.path.exists(cache_file):
-        try:
-            with open(cache_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if data.get("cache_key") == key:
-                timings = [WordTiming(word=w["w"], start=w["s"], end=w["e"]) for w in data.get("words", [])]
-                srt_content = data.get("srt", "")
-                _TRANSCRIPTION_MEMORY_CACHE[key] = (timings, srt_content)
-                return timings, srt_content
-        except Exception:
-            pass
+    candidates = [cache_file]
+
+    # Legacy cache file path alongside media file (for backward compatibility and cleanup)
+    base_dir = os.path.dirname(os.path.abspath(media_path))
+    file_name = os.path.basename(media_path)
+    legacy_file = os.path.join(base_dir, f".{file_name}.submaxxing_cache.json")
+    if os.path.exists(legacy_file):
+        candidates.append(legacy_file)
+
+    for c_path in candidates:
+        if os.path.exists(c_path):
+            try:
+                with open(c_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if data.get("cache_key") == key:
+                    timings = [WordTiming(word=w["w"], start=w["s"], end=w["e"]) for w in data.get("words", [])]
+                    srt_content = data.get("srt", "")
+                    _TRANSCRIPTION_MEMORY_CACHE[key] = (timings, srt_content)
+
+                    # If loaded from legacy location, migrate to central cache and clean up media folder
+                    if c_path == legacy_file:
+                        try:
+                            save_cached_timings(media_path, language, model_name, timings, srt_content)
+                            os.remove(legacy_file)
+                        except Exception:
+                            pass
+                    return timings, srt_content
+            except Exception:
+                pass
     return None
 
 
@@ -156,6 +188,16 @@ def save_cached_timings(media_path: str, language: Optional[str], model_name: st
         }
         with open(cache_file, "w", encoding="utf-8") as f:
             json.dump(data, f)
+    except Exception:
+        pass
+
+    # Clean up legacy cache file if it exists in the media folder
+    try:
+        base_dir = os.path.dirname(os.path.abspath(media_path))
+        file_name = os.path.basename(media_path)
+        legacy_file = os.path.join(base_dir, f".{file_name}.submaxxing_cache.json")
+        if os.path.exists(legacy_file):
+            os.remove(legacy_file)
     except Exception:
         pass
 

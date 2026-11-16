@@ -11,6 +11,8 @@ Features:
 """
 
 import os
+import time
+import tempfile
 import cv2
 import subprocess
 from typing import Dict, Any, List, Tuple, Optional, Callable
@@ -378,8 +380,10 @@ def process_reframe(
                 total_frames=frames_count
             )
 
-            base_dir = os.path.dirname(os.path.abspath(output_path))
-            cmd_script_path = os.path.join(base_dir, f".{os.path.basename(output_path)}.pan.cmd")
+            cmd_script_path = os.path.join(
+                tempfile.gettempdir(),
+                f"submaxxing_pan_{os.getpid()}_{int(time.time() * 1000)}.cmd"
+            )
             write_sendcmd_pan_script(frame_pans, cmd_script_path)
             crop_x = frame_pans[0][1] if frame_pans else max(0, (video_w - crop_w) // 2)
             print(f"[+] Dynamic pan script generated: {len(frame_pans)} frames tracked.")

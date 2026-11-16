@@ -24,6 +24,7 @@ except Exception:
 import json
 import re
 import time
+import tempfile
 import threading
 import webbrowser
 from typing import Optional
@@ -40,8 +41,8 @@ from renderer import (
 from reframe import process_reframe
 
 PORT = 5055
-PREVIEW_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web_preview.mp4")
-REFRAME_PREVIEW_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reframe_preview.mp4")
+PREVIEW_FILE = os.path.join(tempfile.gettempdir(), "submaxxing_web_preview.mp4")
+REFRAME_PREVIEW_FILE = os.path.join(tempfile.gettempdir(), "submaxxing_reframe_preview.mp4")
 
 HTML_CONTENT = """<!DOCTYPE html>
 <html lang="en">
@@ -883,6 +884,18 @@ HTML_CONTENT = """<!DOCTYPE html>
             pointer-events: none;
         }
 
+        .export-options-box {
+            margin-top: 14px;
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
         #statusBox {
             display: none;
             margin-top: 16px;
@@ -1171,6 +1184,17 @@ HTML_CONTENT = """<!DOCTYPE html>
                             </select>
                         </div>
 
+                        <div class="export-options-box">
+                            <label class="toggle-container" style="font-size: 0.85rem; font-weight: 500; cursor: pointer;">
+                                <input type="checkbox" id="exportSubFiles">
+                                <span data-i18n="exportSubFilesLabel">📄 Also export subtitle files (.srt & .ass)</span>
+                            </label>
+                            <label class="toggle-container" id="keepRawReframedGroup" style="font-size: 0.85rem; font-weight: 500; cursor: pointer; display: none;">
+                                <input type="checkbox" id="keepRawReframed">
+                                <span data-i18n="keepRawReframedLabel">🎞️ Keep raw 9:16 video (without subtitles)</span>
+                            </label>
+                        </div>
+
                         <button type="submit" class="btn-submit" id="btnSubmit">
                             <div class="btn-progress-fill" id="mainBtnProgressFill"></div>
                             <span class="btn-text-content" id="mainBtnText" data-i18n="btnSubmit">GENERATE COMPLETE RENDER</span>
@@ -1362,6 +1386,12 @@ HTML_CONTENT = """<!DOCTYPE html>
                         <span class="btn-text-content" id="reframeBtnText">💾 <span data-i18n="btnApplyReframe">Apply Reframe & Return To Subtitles</span></span>
                     </button>
 
+                    <div style="margin-top: 10px;">
+                        <button type="button" class="btn-pill" id="btnExportReframeOnly" onclick="exportReframeOnly()" style="width: 100%; justify-content: center; padding: 11px 14px; font-weight: 700; border-color: rgba(168, 85, 247, 0.4);">
+                            🎬 <span data-i18n="btnExportReframeOnly">Export 9:16 Video Only (Without Subtitles)</span>
+                        </button>
+                    </div>
+
                     <div class="progress-wrap" id="reframeProgressWrap" style="display:none;">
                         <div class="progress-header">
                             <span class="progress-label" id="reframeProgressLabel">⚙️ Reframing with GPU NVENC...</span>
@@ -1466,6 +1496,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 brightnessLabel: "Brightness:",
                 vignetteLabel: "Vignette (Focus border):",
                 btnApplyReframe: "Apply Reframe & Return To Subtitles",
+                btnExportReframeOnly: "Export 9:16 Video Only (Without Subtitles)",
+                exportSubFilesLabel: "Also export subtitle files (.srt & .ass)",
+                keepRawReframedLabel: "Keep intermediate raw 9:16 video (without subtitles)",
+                reframeExportSuccess: "Reframed 9:16 video saved to: ",
                 reframePreviewTitle: "📱 9:16 Reframed Output Preview",
                 reframePlaceholderTitle: "9:16 Canvas Ready",
                 reframePlaceholderText: "Select a video and click Preview Reframed Clip to inspect AI framing & adjustments.",
@@ -1533,6 +1567,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 brightnessLabel: "Luminosité :",
                 vignetteLabel: "Vignettage (Assombrir bords) :",
                 btnApplyReframe: "Appliquer le Reframe & Revenir aux Sous-titres",
+                btnExportReframeOnly: "Exporter uniquement le 9:16 (sans sous-titres)",
+                exportSubFilesLabel: "Exporter aussi les fichiers sous-titres (.srt & .ass)",
+                keepRawReframedLabel: "Conserver la vidéo 9:16 brute intermédiaire (sans sous-titres)",
+                reframeExportSuccess: "Vidéo 9:16 enregistrée sous : ",
                 reframePreviewTitle: "📱 Aperçu du Rendu 9:16",
                 reframePlaceholderTitle: "Canevas 9:16 Prêt",
                 reframePlaceholderText: "Sélectionnez une vidéo et cliquez sur « Prévisualiser l'extrait » pour inspecter le cadrage IA et les retouches.",
@@ -1972,7 +2010,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 fontSize: parseInt(document.getElementById('fontSize').value),
                 animSpeed: parseInt(document.getElementById('animSpeed').value),
                 animScale: parseInt(document.getElementById('animScale').value),
-                allCaps: document.getElementById('allCaps').checked
+                allCaps: document.getElementById('allCaps').checked,
+                exportSubFiles: document.getElementById('exportSubFiles').checked,
+                keepRawReframed: document.getElementById('keepRawReframed') ? document.getElementById('keepRawReframed').checked : false,
+                wasReframed: !!window._wasReframedInSession
             };
 
             try {
@@ -2255,6 +2296,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const data = await res.json();
                 if (data.success && data.outputPath) {
                     prog.complete(currentLang === 'fr' ? '🎉 Vidéo recadrée en 9:16 avec succès !' : '🎉 Reframed to 9:16 successfully!');
+                    window._wasReframedInSession = true;
+                    const keepGroup = document.getElementById('keepRawReframedGroup');
+                    if (keepGroup) keepGroup.style.display = 'flex';
+
                     // Update main video path to newly reframed 9:16 video
                     document.getElementById('videoPath').value = data.outputPath;
                     const filename = data.outputPath.split(/[/\\\\]/).pop();
@@ -2276,6 +2321,65 @@ HTML_CONTENT = """<!DOCTYPE html>
                 btn.disabled = false;
                 const textEl = document.getElementById('reframeBtnText');
                 if (textEl) textEl.innerHTML = `💾 <span data-i18n="btnApplyReframe">${I18N[currentLang].btnApplyReframe}</span>`;
+            }
+        }
+
+        async function exportReframeOnly() {
+            const video = document.getElementById('videoPath').value.trim();
+            if (!video) {
+                alert(currentLang === 'fr' ? "Veuillez sélectionner une vidéo 16:9." : "Please select a 16:9 video first.");
+                return;
+            }
+
+            const btn = document.getElementById('btnExportReframeOnly');
+            btn.disabled = true;
+
+            const prog = trackRealtimeProgress(
+                'reframe',
+                'btnApplyReframe',
+                'reframeBtnProgressFill',
+                'reframeBtnText',
+                'reframeProgressBar',
+                'reframeProgressPct',
+                'reframeProgressLabel',
+                'reframeProgressWrap'
+            );
+
+            const payload = {
+                video: video,
+                mode: document.getElementById('reframeMode').value,
+                manualPan: parseInt(document.getElementById('manualPan').value),
+                sharpness: parseFloat(document.getElementById('sharpness').value) / 100.0,
+                contrast: 1.0 + (parseFloat(document.getElementById('contrast').value) / 100.0),
+                saturation: 1.0 + (parseFloat(document.getElementById('saturation').value) / 100.0),
+                brightness: parseFloat(document.getElementById('brightness').value) / 100.0,
+                vignette: parseFloat(document.getElementById('vignette').value) / 100.0,
+                previewOnly: false
+            };
+
+            try {
+                const res = await fetch('/api/reframe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.success && data.outputPath) {
+                    prog.complete(currentLang === 'fr' ? '🎉 Vidéo 9:16 exportée avec succès !' : '🎉 9:16 Video exported successfully!');
+                    const box = document.getElementById('reframeStatusBox');
+                    if (box) {
+                        box.style.display = 'block';
+                        box.innerHTML = `<span style="color:#4ade80;">✔</span> <b>${I18N[currentLang].reframeExportSuccess}</b><br><code style="word-break:break-all;">${data.outputPath}</code>`;
+                    }
+                } else {
+                    prog.error(data.error || "Reframe failed");
+                    alert("Error: " + (data.error || "Reframe failed"));
+                }
+            } catch (err) {
+                prog.error(err.message);
+                alert("Error: " + err.message);
+            } finally {
+                btn.disabled = false;
             }
         }
 
@@ -2507,18 +2611,25 @@ class SubHandler(BaseHTTPRequestHandler):
 
             active_style = build_style_from_payload(data)
 
-            ass_path = os.path.join(os.path.dirname(PREVIEW_FILE), "web_preview.ass")
+            ass_path = os.path.join(tempfile.gettempdir(), f"submaxxing_preview_{os.getpid()}.ass")
             ass_content = chunks_to_ass(chunks, active_style, play_res_x=width, play_res_y=height)
             with open(ass_path, "w", encoding="utf-8") as f:
                 f.write(ass_content)
 
-            render_subtitles_to_video(
-                video_path=video_path,
-                ass_path=ass_path,
-                output_path=PREVIEW_FILE,
-                use_gpu=True,
-                duration_limit=3.0
-            )
+            try:
+                render_subtitles_to_video(
+                    video_path=video_path,
+                    ass_path=ass_path,
+                    output_path=PREVIEW_FILE,
+                    use_gpu=True,
+                    duration_limit=3.0
+                )
+            finally:
+                if os.path.exists(ass_path):
+                    try:
+                        os.remove(ass_path)
+                    except Exception:
+                        pass
 
             self._send_json({"success": True})
         except Exception as e:
@@ -2601,14 +2712,36 @@ class SubHandler(BaseHTTPRequestHandler):
         render_type = data.get("renderType", "burn")
         model_name = data.get("model", "large-v3-turbo")
         lang = data.get("lang", "fr")
+        export_sub_files = data.get("exportSubFiles", False)
+        keep_raw_reframed = data.get("keepRawReframed", False)
+        was_reframed = data.get("wasReframed", False)
 
         if not video_path or not os.path.exists(video_path):
             self._send_json({"success": False, "error": f"Video file not found: '{video_path}'"})
             return
 
+        temp_ass_path = None
         try:
-            base_name = os.path.splitext(video_path)[0]
-            ass_path = f"{base_name}_submaxxing.ass"
+            dir_name = os.path.dirname(os.path.abspath(video_path))
+            file_stem = os.path.splitext(os.path.basename(video_path))[0]
+
+            is_intermediate_reframe = was_reframed or file_stem.endswith("_reframed_9x16")
+            if is_intermediate_reframe:
+                clean_stem = file_stem.replace("_reframed_9x16", "")
+                final_mp4 = os.path.join(dir_name, f"{clean_stem}_9x16_subbed.mp4")
+            else:
+                clean_stem = file_stem
+                final_mp4 = os.path.join(dir_name, f"{clean_stem}_subbed.mp4")
+
+            mov_out = os.path.join(dir_name, f"{clean_stem}_overlay.mov")
+            webm_out = os.path.join(dir_name, f"{clean_stem}_overlay.webm")
+
+            if export_sub_files:
+                ass_path = os.path.join(dir_name, f"{clean_stem}_submaxxing.ass")
+            else:
+                temp_fd, temp_ass_path = tempfile.mkstemp(suffix="_submaxxing.ass")
+                os.close(temp_fd)
+                ass_path = temp_ass_path
 
             set_progress(active=True, job_type="main", percent=2.0, stage="init", message="Reading video metadata...")
             log(f"[*] Reading video metadata: '{video_path}'...")
@@ -2640,10 +2773,13 @@ class SubHandler(BaseHTTPRequestHandler):
                     use_cache=True,
                     progress_callback=whisper_cb
                 )
-                saved_srt = f"{base_name}_transcribed.srt"
-                with open(saved_srt, "w", encoding="utf-8") as f:
-                    f.write(srt_content)
-                log(f"[+] Saved generated SRT to: '{saved_srt}'")
+                if export_sub_files:
+                    saved_srt = os.path.join(dir_name, f"{clean_stem}_transcribed.srt")
+                    with open(saved_srt, "w", encoding="utf-8") as f:
+                        f.write(srt_content)
+                    log(f"[+] Saved generated SRT to: '{saved_srt}'")
+                else:
+                    log("[i] Clean folder mode active: raw .srt file not exported.")
             else:
                 if not os.path.exists(srt_path):
                     self._send_json({"success": False, "error": f"SRT file not found: '{srt_path}'"})
@@ -2659,7 +2795,10 @@ class SubHandler(BaseHTTPRequestHandler):
             ass_content = chunks_to_ass(chunks, active_style, play_res_x=width, play_res_y=height)
             with open(ass_path, "w", encoding="utf-8") as f:
                 f.write(ass_content)
-            log(f"[+] ASS file created: '{ass_path}'")
+            if export_sub_files:
+                log(f"[+] ASS file created: '{ass_path}'")
+            else:
+                log("[i] Clean folder mode active: ASS subtitles processed via temp cache.")
 
             start_pct = 30.0 if (auto_transcribe or not srt_path) else 6.0
             span = 98.0 - start_pct
@@ -2674,7 +2813,6 @@ class SubHandler(BaseHTTPRequestHandler):
                 )
 
             if render_type in ["overlay_mov", "both"]:
-                mov_out = f"{base_name}_overlay.mov"
                 log(f"[*] Rendering transparent ProRes 4444 overlay (multithreaded)...")
                 render_transparent_overlay(
                     ass_path=ass_path,
@@ -2689,7 +2827,6 @@ class SubHandler(BaseHTTPRequestHandler):
                 log(f"[+] ProRes 4444 overlay ready: '{mov_out}'")
 
             if render_type == "overlay_webm":
-                webm_out = f"{base_name}_overlay.webm"
                 log(f"[*] Rendering transparent WebM overlay (VP9 multithreaded)...")
                 render_transparent_overlay(
                     ass_path=ass_path,
@@ -2704,7 +2841,6 @@ class SubHandler(BaseHTTPRequestHandler):
                 log(f"[+] WebM overlay ready: '{webm_out}'")
 
             if render_type in ["burn", "both"]:
-                final_mp4 = f"{base_name}_subbed.mp4"
                 log(f"[*] GPU NVENC accelerated rendering...")
                 render_subtitles_to_video(
                     video_path=video_path,
@@ -2715,18 +2851,30 @@ class SubHandler(BaseHTTPRequestHandler):
                 )
                 log(f"[+] Final video rendered: '{final_mp4}'")
 
+            # Clean up intermediate raw reframed video if chained and not requested to keep
+            if is_intermediate_reframe and not keep_raw_reframed:
+                if os.path.exists(video_path) and os.path.abspath(video_path) != os.path.abspath(final_mp4):
+                    try:
+                        os.remove(video_path)
+                        log(f"[i] Clean folder mode: intermediate raw 9:16 file '{os.path.basename(video_path)}' cleaned up.")
+                    except Exception as clean_err:
+                        log(f"[!] Note: couldn't delete intermediate file '{video_path}': {clean_err}")
+
             set_progress(active=False, job_type="main", percent=100.0, stage="done", message="Export complete!", done=True)
             log("\n🎉 Done successfully!")
-            self._send_json({"success": True, "logs": "\n".join(logs)})
+            self._send_json({"success": True, "logs": "\n".join(logs), "outputPath": final_mp4})
 
         except Exception as e:
             import traceback
             set_progress(active=False, job_type="main", percent=0.0, stage="error", message=str(e), done=True, error=str(e))
             log(f"[!] Error: {traceback.format_exc()}")
             self._send_json({"success": False, "error": str(e), "logs": "\n".join(logs)})
-            import traceback
-            log(f"[!] Error: {traceback.format_exc()}")
-            self._send_json({"success": False, "error": str(e), "logs": "\n".join(logs)})
+        finally:
+            if temp_ass_path and os.path.exists(temp_ass_path):
+                try:
+                    os.remove(temp_ass_path)
+                except Exception:
+                    pass
 
     def _serve_video_file(self, file_path: str):
         size = os.path.getsize(file_path)
