@@ -104,8 +104,8 @@ def build_reframe_filter_chain(
         adj_parts.append(f"eq=contrast={contrast:.2f}:saturation={saturation:.2f}:brightness={brightness:.2f}")
 
     if sharpness > 0.0:
-        s_val = min(2.0, sharpness * 1.5)
-        adj_parts.append(f"unsharp=5:5:{s_val:.2f}:5:5:0.0")
+        s_val = min(3.5, sharpness * 3.0)
+        adj_parts.append(f"unsharp=7:7:{s_val:.2f}:7:7:0.0")
 
     if vignette > 0.0:
         angle_val = max(0.2, min(1.5, vignette * 1.2))

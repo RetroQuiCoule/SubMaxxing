@@ -493,23 +493,17 @@ HTML_CONTENT = """<!DOCTYPE html>
             width: 100%; height: 100%;
             pointer-events: none;
             z-index: 2;
-            transition: box-shadow 0.2s ease;
+            transition: background 0.15s ease;
         }
-        .reframe-mode-badge {
-            position: absolute;
-            top: 14px; right: 14px;
-            background: rgba(15, 10, 25, 0.85);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            color: #e9d5ff;
-            border: 1px solid rgba(168, 85, 247, 0.4);
+        .mode-badge-header {
             font-size: 0.72rem;
             font-weight: 700;
             padding: 4px 10px;
             border-radius: 20px;
-            z-index: 4;
-            pointer-events: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            background: rgba(168, 85, 247, 0.15);
+            color: #d8b4fe;
+            border: 1px solid rgba(168, 85, 247, 0.4);
+            letter-spacing: 0.3px;
         }
         .reframe-placeholder {
             position: absolute;
@@ -544,6 +538,69 @@ HTML_CONTENT = """<!DOCTYPE html>
             font-size: 0.82rem;
             line-height: 1.45;
             color: #a78bfa;
+        }
+
+        /* Animated Progress Bars */
+        .progress-wrap {
+            margin-top: 14px;
+            background: #090d15;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border-highlight);
+            box-shadow: var(--neu-inset);
+            animation: fadeIn 0.3s ease;
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.82rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-dim);
+        }
+        .progress-pct {
+            font-family: Consolas, monospace;
+            font-weight: 800;
+            color: var(--accent);
+        }
+        .progress-track {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 6px;
+            transition: width 0.35s ease;
+            background-size: 30px 30px;
+            background-image: linear-gradient(
+                45deg,
+                rgba(255, 255, 255, 0.22) 25%,
+                transparent 25%,
+                transparent 50%,
+                rgba(255, 255, 255, 0.22) 50%,
+                rgba(255, 255, 255, 0.22) 75%,
+                transparent 75%,
+                transparent
+            );
+            animation: progressStripes 1s linear infinite;
+        }
+        .progress-fill-cyan {
+            background-color: #00f2fe;
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.6);
+        }
+        .progress-fill-purple {
+            background-color: #a855f7;
+            box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+        }
+        @keyframes progressStripes {
+            0% { background-position: 0 0; }
+            100% { background-position: 30px 0; }
         }
 
         /* TikTok UI Overlay */
@@ -808,6 +865,15 @@ HTML_CONTENT = """<!DOCTYPE html>
     </style>
 </head>
 <body>
+    <!-- Hardware SVG Convolve Sharpness Filter -->
+    <svg style="position: absolute; width: 0; height: 0; pointer-events: none;">
+        <defs>
+            <filter id="reframeSharpnessFilter">
+                <feConvolveMatrix id="sharpnessKernel" order="3" preserveAlpha="true" kernelMatrix="0 0 0 0 1 0 0 0 0"/>
+            </filter>
+        </defs>
+    </svg>
+
     <!-- Top Navbar -->
     <nav class="navbar">
         <a href="#" class="brand" onclick="switchView('subtitles')">
@@ -1071,6 +1137,16 @@ HTML_CONTENT = """<!DOCTYPE html>
                         </div>
 
                         <button type="submit" class="btn-submit" id="btnSubmit" data-i18n="btnSubmit">GENERATE COMPLETE RENDER</button>
+
+                        <div class="progress-wrap" id="mainProgressWrap" style="display:none;">
+                            <div class="progress-header">
+                                <span class="progress-label" id="mainProgressLabel">⚙️ Processing video...</span>
+                                <span class="progress-pct" id="mainProgressPct">0%</span>
+                            </div>
+                            <div class="progress-track">
+                                <div class="progress-fill progress-fill-cyan" id="mainProgressBar" style="width: 0%;"></div>
+                            </div>
+                        </div>
                     </div>
                 </form>
 
@@ -1246,6 +1322,16 @@ HTML_CONTENT = """<!DOCTYPE html>
                     <button type="button" class="btn-submit btn-reframe-submit" id="btnApplyReframe" onclick="applyAndReturnToSubtitles()">
                         💾 <span data-i18n="btnApplyReframe">Apply Reframe & Return To Subtitles</span>
                     </button>
+
+                    <div class="progress-wrap" id="reframeProgressWrap" style="display:none;">
+                        <div class="progress-header">
+                            <span class="progress-label" id="reframeProgressLabel">⚙️ Reframing with GPU NVENC...</span>
+                            <span class="progress-pct" id="reframeProgressPct">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill progress-fill-purple" id="reframeProgressBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="reframeStatusBox" style="display:none;" class="card"></div>
@@ -1256,16 +1342,16 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <div class="card">
                     <div class="card-title">
                         <div class="card-title-left" data-i18n="reframePreviewTitle">📱 9:16 Reframed Output Preview</div>
+                        <div id="reframeModeBadge" class="mode-badge-header">🎯 Smart Face Track</div>
                     </div>
 
                     <div class="phone-wrapper" id="reframePhoneWrapper">
                         <video id="reframePlayer" class="reframe-phone-video" controls autoplay loop playsinline></video>
                         <div id="reframeVignetteOverlay" class="reframe-vignette-overlay"></div>
-                        <div id="reframeModeBadge" class="reframe-mode-badge">🎯 Smart Face Track</div>
                         <div id="reframePlaceholder" class="reframe-placeholder">
                             <div class="reframe-ph-icon">📐</div>
                             <div class="reframe-ph-title" data-i18n="reframePlaceholderTitle">9:16 Canvas Ready</div>
-                            <div class="reframe-ph-desc" data-i18n="reframePlaceholderText">Select a video and click "Preview Reframed Clip" to inspect AI framing & adjustments.</div>
+                            <div class="reframe-ph-desc" data-i18n="reframePlaceholderText">Select a video to inspect framing & color grading.</div>
                         </div>
                     </div>
 
@@ -1475,6 +1561,18 @@ HTML_CONTENT = """<!DOCTYPE html>
             const badge = document.getElementById('reframeVideoBadge');
             badge.innerText = '🎬 ' + filename;
             badge.className = 'file-badge has-file';
+
+            // Instantly load video into reframe player for live preview & grading
+            const player = document.getElementById('reframePlayer');
+            const placeholder = document.getElementById('reframePlaceholder');
+            if (placeholder) placeholder.style.display = 'none';
+            if (player) {
+                player.style.display = 'block';
+                player.src = `/api/stream_video?path=${encodeURIComponent(fullPath)}`;
+                player.load();
+                player.play().catch(() => {});
+            }
+            updateReframePreview();
         }
 
         // Browse Native Windows Dialog
@@ -1490,6 +1588,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                         const badge = document.getElementById('videoBadge');
                         badge.innerText = '🎬 ' + filename;
                         badge.className = 'file-badge has-file';
+                        const rfBadge = document.getElementById('reframeVideoBadge');
+                        if (rfBadge) {
+                            rfBadge.innerText = '🎬 ' + filename;
+                            rfBadge.className = 'file-badge has-file';
+                        }
                     } else if (type === 'srt') {
                         document.getElementById('srtPath').value = data.path;
                         const badge = document.getElementById('srtBadge');
@@ -1783,6 +1886,17 @@ HTML_CONTENT = """<!DOCTYPE html>
             statusBox.style.display = "block";
             statusBox.innerText = I18N[currentLang].statusStart;
 
+            const stages = autoTranscribeCheck.checked ? [
+                { text: currentLang === 'fr' ? '🎙️ Transcription Whisper AI (GPU CUDA)...' : '🎙️ Whisper AI transcription (CUDA GPU)...', maxPct: 35 },
+                { text: currentLang === 'fr' ? '✂️ Découpage dynamique des mots (1-3 mots)...' : '✂️ Slicing dynamic chunks (1-3 words)...', maxPct: 60 },
+                { text: currentLang === 'fr' ? '⚡ Rendu vidéo accéléré NVENC (h264_nvenc)...' : '⚡ GPU NVENC rendering (h264_nvenc)...', maxPct: 92 }
+            ] : [
+                { text: currentLang === 'fr' ? '📄 Lecture et découpage du fichier SRT...' : '📄 Reading & chunking SRT file...', maxPct: 30 },
+                { text: currentLang === 'fr' ? '🎨 Génération des styles et animations ASS...' : '🎨 Generating ASS style animations...', maxPct: 60 },
+                { text: currentLang === 'fr' ? '⚡ Encodage vidéo GPU NVENC...' : '⚡ GPU NVENC video encoding...', maxPct: 92 }
+            ];
+            const prog = startProgress('mainProgressBar', 'mainProgressPct', 'mainProgressLabel', 'mainProgressWrap', stages);
+
             const payload = {
                 video: video,
                 autoTranscribe: autoTranscribeCheck.checked,
@@ -1816,17 +1930,77 @@ HTML_CONTENT = """<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success) {
+                    prog.complete(currentLang === 'fr' ? '🎉 Rendu terminé avec succès !' : '🎉 Render completed successfully!');
                     statusBox.innerText = I18N[currentLang].successMsg + "\\n\\n" + data.logs;
                 } else {
+                    prog.error(data.error || "Failed");
                     statusBox.innerText = I18N[currentLang].errorMsg + "\\n\\n" + (data.error || "An error occurred.");
                 }
             } catch (err) {
+                prog.error(err.message);
                 statusBox.innerText = I18N[currentLang].errorMsg + " " + err.message;
             } finally {
                 btnSubmit.disabled = false;
                 btnSubmit.innerText = I18N[currentLang].btnSubmit;
             }
         });
+
+        // ================= PROGRESS BAR CONTROLLER =================
+        function startProgress(fillId, pctId, labelId, wrapId, stages) {
+            const wrap = document.getElementById(wrapId);
+            const fill = document.getElementById(fillId);
+            const pct = document.getElementById(pctId);
+            const lbl = document.getElementById(labelId);
+            if (wrap) wrap.style.display = 'block';
+            if (fill) {
+                fill.style.width = '0%';
+                fill.style.backgroundColor = '';
+            }
+            if (pct) pct.innerText = '0%';
+
+            let currentStage = 0;
+            let currentPct = 0;
+
+            const interval = setInterval(() => {
+                if (currentStage < stages.length) {
+                    const target = stages[currentStage];
+                    if (lbl) lbl.innerText = target.text;
+                    if (currentPct < target.maxPct) {
+                        currentPct += Math.random() * 2.5 + 1.0;
+                        if (currentPct > target.maxPct) currentPct = target.maxPct;
+                        if (fill) fill.style.width = `${Math.round(currentPct)}%`;
+                        if (pct) pct.innerText = `${Math.round(currentPct)}%`;
+                    } else {
+                        currentStage++;
+                    }
+                }
+            }, 100);
+
+            return {
+                complete: (msg) => {
+                    clearInterval(interval);
+                    if (fill) fill.style.width = '100%';
+                    if (pct) pct.innerText = '100%';
+                    if (lbl) lbl.innerText = msg || (currentLang === 'fr' ? '✅ Traitement terminé !' : '✅ Complete!');
+                    setTimeout(() => {
+                        if (wrap) wrap.style.display = 'none';
+                        if (fill) fill.style.width = '0%';
+                    }, 2500);
+                },
+                error: (errMsg) => {
+                    clearInterval(interval);
+                    if (fill) fill.style.backgroundColor = '#ef4444';
+                    if (lbl) lbl.innerText = errMsg || (currentLang === 'fr' ? '❌ Erreur' : '❌ Failed');
+                    setTimeout(() => {
+                        if (wrap) wrap.style.display = 'none';
+                        if (fill) {
+                            fill.style.width = '0%';
+                            fill.style.backgroundColor = '';
+                        }
+                    }, 3500);
+                }
+            };
+        }
 
         // ================= REFRAME STUDIO LOGIC =================
         function updateReframePreview() {
@@ -1845,27 +2019,49 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('brightnessVal').innerText = (brightness >= 0 ? '+' : '') + `${brightness}%`;
             document.getElementById('vignetteVal').innerText = `${vignette}%`;
 
-            // Live CSS Filter on player
+            // 1. Live Hardware SVG Convolution Sharpness Matrix
+            const kernel = document.getElementById('sharpnessKernel');
+            if (kernel) {
+                if (sharpness > 0) {
+                    const k = (sharpness / 100.0) * 0.75;
+                    const center = (1.0 + 4 * k).toFixed(3);
+                    const edge = (-k).toFixed(3);
+                    kernel.setAttribute('kernelMatrix', `0 ${edge} 0 ${edge} ${center} ${edge} 0 ${edge} 0`);
+                } else {
+                    kernel.setAttribute('kernelMatrix', '0 0 0 0 1 0 0 0 0');
+                }
+            }
+
+            // 2. Live CSS Color Grading & Filter on video
             const player = document.getElementById('reframePlayer');
             const cVal = 1 + (contrast / 100);
             const sVal = 1 + (saturation / 100);
             const bVal = 1 + (brightness / 100);
-            player.style.filter = `contrast(${cVal}) saturate(${sVal}) brightness(${bVal})`;
+            player.style.filter = `contrast(${cVal}) saturate(${sVal}) brightness(${bVal}) url(#reframeSharpnessFilter)`;
 
-            // Live Vignette Overlay Shadow
+            // 3. Framing Object-Position (Manual Pan & Center)
+            if (mode === 'manual') {
+                const panPct = parseInt(document.getElementById('manualPan').value);
+                player.style.objectPosition = `${panPct}% center`;
+            } else if (mode === 'center') {
+                player.style.objectPosition = '50% center';
+            } else {
+                player.style.objectPosition = 'center center';
+            }
+
+            // 4. Subtle Cinema Radial Vignette (NO harsh black bands over video)
             const vigOverlay = document.getElementById('reframeVignetteOverlay');
             if (vigOverlay) {
                 if (vignette > 0) {
-                    const blur = (vignette / 100) * 120 + 20;
-                    const spread = (vignette / 100) * 60;
-                    const opacity = Math.min(0.92, (vignette / 100) * 1.05);
-                    vigOverlay.style.boxShadow = `inset 0 0 ${blur}px ${spread}px rgba(0, 0, 0, ${opacity})`;
+                    const darkness = (vignette / 100.0) * 0.75;
+                    const innerRadius = Math.max(35, 75 - (vignette / 100.0) * 35);
+                    vigOverlay.style.background = `radial-gradient(ellipse at center, transparent ${innerRadius}%, rgba(0,0,0,${darkness}) 100%)`;
                 } else {
-                    vigOverlay.style.boxShadow = 'none';
+                    vigOverlay.style.background = 'none';
                 }
             }
 
-            // Update Mode Badge text
+            // 5. Update Mode Badge text in header
             const modeBadge = document.getElementById('reframeModeBadge');
             const modeNames = {
                 face_track: '🎯 Smart Face Track',
@@ -1936,6 +2132,13 @@ HTML_CONTENT = """<!DOCTYPE html>
             btn.disabled = true;
             btn.innerHTML = currentLang === 'fr' ? "⏳ Rendu Reframe complet (GPU RTX)..." : "⏳ Rendering Full 9:16 Reframe (RTX GPU)...";
 
+            const stages = [
+                { text: currentLang === 'fr' ? '🤖 Détection faciale & calcul du cadrage 9:16...' : '🤖 Face detection & 9:16 tracking...', maxPct: 35 },
+                { text: currentLang === 'fr' ? '✨ Application de la netteté et retouches...' : '✨ Applying sharpness & color grading...', maxPct: 65 },
+                { text: currentLang === 'fr' ? '⚡ Encodage matériel NVENC 1080x1920...' : '⚡ Hardware NVENC encoding 1080x1920...', maxPct: 93 }
+            ];
+            const prog = startProgress('reframeProgressBar', 'reframeProgressPct', 'reframeProgressLabel', 'reframeProgressWrap', stages);
+
             const payload = {
                 video: video,
                 mode: document.getElementById('reframeMode').value,
@@ -1956,6 +2159,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success && data.outputPath) {
+                    prog.complete(currentLang === 'fr' ? '🎉 Vidéo recadrée en 9:16 avec succès !' : '🎉 Reframed to 9:16 successfully!');
                     // Update main video path to newly reframed 9:16 video
                     document.getElementById('videoPath').value = data.outputPath;
                     const filename = data.outputPath.split(/[/\\\\]/).pop();
@@ -1963,15 +2167,15 @@ HTML_CONTENT = """<!DOCTYPE html>
                     badge.innerText = '🎬 ' + filename + ' (9:16)';
                     badge.className = 'file-badge has-file';
 
-                    alert(currentLang === 'fr' 
-                        ? "Vidéo recadrée en 9:16 avec succès ! Vous pouvez maintenant appliquer vos sous-titres."
-                        : "Video successfully reframed to 9:16! You can now apply your subtitles.");
-
-                    switchView('subtitles');
+                    setTimeout(() => {
+                        switchView('subtitles');
+                    }, 1200);
                 } else {
+                    prog.error(data.error || "Reframe failed");
                     alert("Error: " + (data.error || "Reframe failed"));
                 }
             } catch (err) {
+                prog.error(err.message);
                 alert("Error: " + err.message);
             } finally {
                 btn.disabled = false;
@@ -2048,6 +2252,14 @@ class SubHandler(BaseHTTPRequestHandler):
             target = PREVIEW_FILE if parsed.path == "/api/get_preview_video" else REFRAME_PREVIEW_FILE
             if os.path.exists(target):
                 self._serve_video_file(target)
+            else:
+                self.send_response(404)
+                self.end_headers()
+        elif parsed.path == "/api/stream_video":
+            query = urllib.parse.parse_qs(parsed.query)
+            vpath = query.get("path", [""])[0]
+            if vpath and os.path.exists(vpath):
+                self._serve_video_file(vpath)
             else:
                 self.send_response(404)
                 self.end_headers()
