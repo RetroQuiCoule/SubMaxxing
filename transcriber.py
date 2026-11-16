@@ -67,15 +67,16 @@ def get_whisper_model(model_name: str = "large-v3-turbo", device: str = "auto", 
     if compute_type == "auto":
         compute_type = "float16" if device == "cuda" else "int8"
 
+    print(f"[*] Chargement du modèle Whisper '{model_name}' (téléchargement automatique lors de la 1ère utilisation)...")
     if device == "cuda":
         try:
-            print(f"[*] Chargement de Whisper '{model_name}' sur GPU RTX (CUDA {compute_type})...")
+            print(f"[*] Exécution sur GPU RTX (CUDA {compute_type})...")
             return WhisperModel(model_name, device="cuda", compute_type=compute_type)
         except Exception as e:
-            print(f"[!] Avertissement CUDA ({e}), bascule automatique sur CPU (int8)...")
+            print(f"[!] Avertissement GPU ({e}), bascule automatique sur CPU (int8)...")
             return WhisperModel(model_name, device="cpu", compute_type="int8")
     else:
-        print(f"[*] Chargement de Whisper '{model_name}' sur CPU (int8)...")
+        print(f"[*] Exécution sur CPU (mode int8)...")
         return WhisperModel(model_name, device="cpu", compute_type="int8")
 
 
