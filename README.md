@@ -13,6 +13,7 @@
 
 ## ⚡ Features
 
+- **Auto-Reframe (16:9 → 9:16)**: Face-tracking Smart Pan, split-screen podcasts, blurred background, plus live sharpness/contrast/vignette grading.
 - **Smart SRT Slicing**: Converts long sentence `.srt` files into dynamic 1-to-3-word TikTok chunks.
 - **French Elisions Handled**: Binds `c'`, `d'`, `l'`, `j'`, `qu'` (e.g. `c'est`, `d'accord`) so apostrophes are never split.
 - **Local Whisper (`large-v3-turbo`)**: Fast local transcription with CUDA acceleration or automatic CPU fallback.

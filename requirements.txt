@@ -7,6 +7,9 @@ tqdm>=4.60.0
 huggingface-hub>=0.20.0
 tokenizers>=0.13.0
 
+# Computer Vision & Auto-Reframe (Face Tracking 16:9 -> 9:16)
+opencv-python>=4.10.0
+
 # NVIDIA CUDA 12 & cuDNN runtimes for GPU acceleration on Windows/Linux
 nvidia-cublas-cu12>=12.0.0
 nvidia-cudnn-cu12>=9.0.0
