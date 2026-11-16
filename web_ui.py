@@ -24,7 +24,9 @@ except Exception:
 import json
 import re
 import time
+import threading
 import webbrowser
+from typing import Optional
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 import urllib.parse
@@ -836,16 +838,49 @@ HTML_CONTENT = """<!DOCTYPE html>
             cursor: pointer;
             box-shadow: 0 6px 20px var(--accent-glow);
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .btn-submit:hover {
+        .btn-submit:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(0, 242, 254, 0.45);
+        }
+        .btn-submit:disabled {
+            cursor: wait;
+            opacity: 0.95;
         }
 
         .btn-reframe-submit {
             background: var(--reframe-grad);
             box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4);
             color: #fff;
+        }
+
+        .btn-progress-fill {
+            position: absolute;
+            top: 0; left: 0;
+            height: 100%;
+            width: 0%;
+            background: rgba(255, 255, 255, 0.35);
+            pointer-events: none;
+            transition: width 0.2s ease-out;
+            z-index: 1;
+        }
+        .btn-reframe-submit .btn-progress-fill {
+            background: rgba(255, 255, 255, 0.28);
+        }
+        .btn-text-content {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            pointer-events: none;
         }
 
         #statusBox {
@@ -1136,7 +1171,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                             </select>
                         </div>
 
-                        <button type="submit" class="btn-submit" id="btnSubmit" data-i18n="btnSubmit">GENERATE COMPLETE RENDER</button>
+                        <button type="submit" class="btn-submit" id="btnSubmit">
+                            <div class="btn-progress-fill" id="mainBtnProgressFill"></div>
+                            <span class="btn-text-content" id="mainBtnText" data-i18n="btnSubmit">GENERATE COMPLETE RENDER</span>
+                        </button>
 
                         <div class="progress-wrap" id="mainProgressWrap" style="display:none;">
                             <div class="progress-header">
@@ -1320,7 +1358,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <!-- 3. Finish Action -->
                 <div class="card">
                     <button type="button" class="btn-submit btn-reframe-submit" id="btnApplyReframe" onclick="applyAndReturnToSubtitles()">
-                        💾 <span data-i18n="btnApplyReframe">Apply Reframe & Return To Subtitles</span>
+                        <div class="btn-progress-fill" id="reframeBtnProgressFill"></div>
+                        <span class="btn-text-content" id="reframeBtnText">💾 <span data-i18n="btnApplyReframe">Apply Reframe & Return To Subtitles</span></span>
                     </button>
 
                     <div class="progress-wrap" id="reframeProgressWrap" style="display:none;">
@@ -1593,6 +1632,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                             rfBadge.innerText = '🎬 ' + filename;
                             rfBadge.className = 'file-badge has-file';
                         }
+                        checkVideoCache(data.path);
                     } else if (type === 'srt') {
                         document.getElementById('srtPath').value = data.path;
                         const badge = document.getElementById('srtBadge');
@@ -1605,6 +1645,20 @@ HTML_CONTENT = """<!DOCTYPE html>
             } catch (err) {
                 alert("File Explorer error: " + err.message);
             }
+        }
+
+        async function checkVideoCache(filePath) {
+            if (!filePath) return;
+            try {
+                const res = await fetch(`/api/check_cache?video=${encodeURIComponent(filePath)}`);
+                const data = await res.json();
+                if (data.cached) {
+                    const badge = document.getElementById('videoBadge');
+                    if (badge && !badge.innerText.includes('⚡')) {
+                        badge.innerText += ' (⚡ Prêt en cache)';
+                    }
+                }
+            } catch (e) {}
         }
 
         // Toggle Whisper controls
@@ -1882,20 +1936,19 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
 
             btnSubmit.disabled = true;
-            btnSubmit.innerText = currentLang === 'fr' ? "⏳ RENDU COMPLET EN COURS..." : "⏳ RENDERING FULL VIDEO (GPU ACCELERATED)...";
             statusBox.style.display = "block";
             statusBox.innerText = I18N[currentLang].statusStart;
 
-            const stages = autoTranscribeCheck.checked ? [
-                { text: currentLang === 'fr' ? '🎙️ Transcription Whisper AI (GPU CUDA)...' : '🎙️ Whisper AI transcription (CUDA GPU)...', maxPct: 35 },
-                { text: currentLang === 'fr' ? '✂️ Découpage dynamique des mots (1-3 mots)...' : '✂️ Slicing dynamic chunks (1-3 words)...', maxPct: 60 },
-                { text: currentLang === 'fr' ? '⚡ Rendu vidéo accéléré NVENC (h264_nvenc)...' : '⚡ GPU NVENC rendering (h264_nvenc)...', maxPct: 92 }
-            ] : [
-                { text: currentLang === 'fr' ? '📄 Lecture et découpage du fichier SRT...' : '📄 Reading & chunking SRT file...', maxPct: 30 },
-                { text: currentLang === 'fr' ? '🎨 Génération des styles et animations ASS...' : '🎨 Generating ASS style animations...', maxPct: 60 },
-                { text: currentLang === 'fr' ? '⚡ Encodage vidéo GPU NVENC...' : '⚡ GPU NVENC video encoding...', maxPct: 92 }
-            ];
-            const prog = startProgress('mainProgressBar', 'mainProgressPct', 'mainProgressLabel', 'mainProgressWrap', stages);
+            const prog = trackRealtimeProgress(
+                'main',
+                'btnSubmit',
+                'mainBtnProgressFill',
+                'mainBtnText',
+                'mainProgressBar',
+                'mainProgressPct',
+                'mainProgressLabel',
+                'mainProgressWrap'
+            );
 
             const payload = {
                 video: video,
@@ -1930,7 +1983,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success) {
-                    prog.complete(currentLang === 'fr' ? '🎉 Rendu terminé avec succès !' : '🎉 Render completed successfully!');
+                    prog.complete(currentLang === 'fr' ? '🎉 Rendu vidéo terminé avec succès !' : '🎉 Render completed successfully!');
                     statusBox.innerText = I18N[currentLang].successMsg + "\\n\\n" + data.logs;
                 } else {
                     prog.error(data.error || "Failed");
@@ -1941,61 +1994,99 @@ HTML_CONTENT = """<!DOCTYPE html>
                 statusBox.innerText = I18N[currentLang].errorMsg + " " + err.message;
             } finally {
                 btnSubmit.disabled = false;
-                btnSubmit.innerText = I18N[currentLang].btnSubmit;
+                const origText = I18N[currentLang].btnSubmit;
+                const textEl = document.getElementById('mainBtnText');
+                if (textEl) textEl.innerText = origText;
             }
         });
 
-        // ================= PROGRESS BAR CONTROLLER =================
-        function startProgress(fillId, pctId, labelId, wrapId, stages) {
+        // ================= REAL-TIME PROGRESS CONTROLLER =================
+        function trackRealtimeProgress(jobType, btnId, btnFillId, btnTextId, barFillId, pctId, lblId, wrapId) {
             const wrap = document.getElementById(wrapId);
-            const fill = document.getElementById(fillId);
+            const barFill = document.getElementById(barFillId);
             const pct = document.getElementById(pctId);
-            const lbl = document.getElementById(labelId);
+            const lbl = document.getElementById(lblId);
+            const btn = document.getElementById(btnId);
+            const btnFill = document.getElementById(btnFillId);
+            const btnText = document.getElementById(btnTextId);
+
             if (wrap) wrap.style.display = 'block';
-            if (fill) {
-                fill.style.width = '0%';
-                fill.style.backgroundColor = '';
+            if (barFill) {
+                barFill.style.width = '0%';
+                barFill.style.backgroundColor = '';
             }
+            if (btnFill) btnFill.style.width = '0%';
             if (pct) pct.innerText = '0%';
+            if (lbl) lbl.innerText = currentLang === 'fr' ? '⚙️ Initialisation du traitement...' : '⚙️ Initializing processing...';
 
-            let currentStage = 0;
-            let currentPct = 0;
+            let pollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch('/api/progress');
+                    const data = await res.json();
 
-            const interval = setInterval(() => {
-                if (currentStage < stages.length) {
-                    const target = stages[currentStage];
-                    if (lbl) lbl.innerText = target.text;
-                    if (currentPct < target.maxPct) {
-                        currentPct += Math.random() * 2.5 + 1.0;
-                        if (currentPct > target.maxPct) currentPct = target.maxPct;
-                        if (fill) fill.style.width = `${Math.round(currentPct)}%`;
-                        if (pct) pct.innerText = `${Math.round(currentPct)}%`;
-                    } else {
-                        currentStage++;
+                    if (data && data.active && data.type === jobType) {
+                        const curPct = Math.min(99, Math.max(0, Math.round(data.percent || 0)));
+                        if (barFill) barFill.style.width = `${curPct}%`;
+                        if (btnFill) btnFill.style.width = `${curPct}%`;
+                        if (pct) pct.innerText = `${curPct}%`;
+
+                        let desc = data.message || '';
+                        let btnDesc = `${curPct}%`;
+
+                        if (data.stage === 'whisper') {
+                            desc = currentLang === 'fr'
+                                ? `🎙️ Whisper AI (CUDA GPU) : ${data.cur_sec}s / ${data.total_sec}s (${curPct}%)`
+                                : `🎙️ Whisper AI (CUDA GPU): ${data.cur_sec}s / ${data.total_sec}s (${curPct}%)`;
+                            btnDesc = `🎙️ Whisper ${curPct}%`;
+                        } else if (data.stage === 'face_track') {
+                            desc = currentLang === 'fr'
+                                ? `🤖 Détection faciale & cadrage (${curPct}%)`
+                                : `🤖 OpenCV Face Tracking (${curPct}%)`;
+                            btnDesc = `🤖 Face Track ${curPct}%`;
+                        } else if (data.stage === 'nvenc') {
+                            desc = currentLang === 'fr'
+                                ? `⚡ GPU NVENC : ${data.cur_sec}s / ${data.total_sec}s (${curPct}%) • ${data.speed}`
+                                : `⚡ GPU NVENC: ${data.cur_sec}s / ${data.total_sec}s (${curPct}%) • ${data.speed}`;
+                            btnDesc = `⚡ NVENC ${curPct}% (${data.speed})`;
+                        } else if (data.stage === 'init') {
+                            desc = currentLang === 'fr' ? '⚙️ Préparation du flux vidéo...' : '⚙️ Preparing video stream...';
+                            btnDesc = `⚙️ ${curPct}%`;
+                        }
+
+                        if (lbl) lbl.innerText = desc;
+                        if (btnText) btnText.innerHTML = `<span>⏳</span> <b>${btnDesc}</b>`;
                     }
-                }
-            }, 100);
+                } catch (e) {}
+            }, 250);
 
             return {
                 complete: (msg) => {
-                    clearInterval(interval);
-                    if (fill) fill.style.width = '100%';
+                    clearInterval(pollInterval);
+                    if (barFill) barFill.style.width = '100%';
+                    if (btnFill) btnFill.style.width = '100%';
                     if (pct) pct.innerText = '100%';
-                    if (lbl) lbl.innerText = msg || (currentLang === 'fr' ? '✅ Traitement terminé !' : '✅ Complete!');
+                    if (lbl) lbl.innerText = msg || (currentLang === 'fr' ? '✅ Traitement terminé avec succès !' : '✅ Completed successfully!');
+                    if (btnText) btnText.innerHTML = `<span>🎉</span> <b>${currentLang === 'fr' ? 'TERMINÉ (100%)' : 'DONE (100%)'}</b>`;
                     setTimeout(() => {
                         if (wrap) wrap.style.display = 'none';
-                        if (fill) fill.style.width = '0%';
+                        if (barFill) barFill.style.width = '0%';
+                        if (btnFill) btnFill.style.width = '0%';
                     }, 2500);
                 },
                 error: (errMsg) => {
-                    clearInterval(interval);
-                    if (fill) fill.style.backgroundColor = '#ef4444';
+                    clearInterval(pollInterval);
+                    if (barFill) {
+                        barFill.style.width = '100%';
+                        barFill.style.backgroundColor = '#ef4444';
+                    }
+                    if (btnFill) btnFill.style.width = '0%';
                     if (lbl) lbl.innerText = errMsg || (currentLang === 'fr' ? '❌ Erreur' : '❌ Failed');
+                    if (btnText) btnText.innerHTML = `<span>❌</span> <b>${currentLang === 'fr' ? 'ERREUR' : 'ERROR'}</b>`;
                     setTimeout(() => {
                         if (wrap) wrap.style.display = 'none';
-                        if (fill) {
-                            fill.style.width = '0%';
-                            fill.style.backgroundColor = '';
+                        if (barFill) {
+                            barFill.style.width = '0%';
+                            barFill.style.backgroundColor = '';
                         }
                     }, 3500);
                 }
@@ -2049,12 +2140,13 @@ HTML_CONTENT = """<!DOCTYPE html>
                 player.style.objectPosition = 'center center';
             }
 
-            // 4. Subtle Cinema Radial Vignette (NO harsh black bands over video)
+            // 4. Subtle Cinema Radial Vignette (Matches FFmpeg Calibrated Curve)
             const vigOverlay = document.getElementById('reframeVignetteOverlay');
             if (vigOverlay) {
                 if (vignette > 0) {
-                    const darkness = (vignette / 100.0) * 0.75;
-                    const innerRadius = Math.max(35, 75 - (vignette / 100.0) * 35);
+                    const vRatio = vignette / 100.0;
+                    const darkness = (0.2 + vRatio * 0.75).toFixed(2);
+                    const innerRadius = Math.round(72 - vRatio * 35);
                     vigOverlay.style.background = `radial-gradient(ellipse at center, transparent ${innerRadius}%, rgba(0,0,0,${darkness}) 100%)`;
                 } else {
                     vigOverlay.style.background = 'none';
@@ -2130,14 +2222,17 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             const btn = document.getElementById('btnApplyReframe');
             btn.disabled = true;
-            btn.innerHTML = currentLang === 'fr' ? "⏳ Rendu Reframe complet (GPU RTX)..." : "⏳ Rendering Full 9:16 Reframe (RTX GPU)...";
 
-            const stages = [
-                { text: currentLang === 'fr' ? '🤖 Détection faciale & calcul du cadrage 9:16...' : '🤖 Face detection & 9:16 tracking...', maxPct: 35 },
-                { text: currentLang === 'fr' ? '✨ Application de la netteté et retouches...' : '✨ Applying sharpness & color grading...', maxPct: 65 },
-                { text: currentLang === 'fr' ? '⚡ Encodage matériel NVENC 1080x1920...' : '⚡ Hardware NVENC encoding 1080x1920...', maxPct: 93 }
-            ];
-            const prog = startProgress('reframeProgressBar', 'reframeProgressPct', 'reframeProgressLabel', 'reframeProgressWrap', stages);
+            const prog = trackRealtimeProgress(
+                'reframe',
+                'btnApplyReframe',
+                'reframeBtnProgressFill',
+                'reframeBtnText',
+                'reframeProgressBar',
+                'reframeProgressPct',
+                'reframeProgressLabel',
+                'reframeProgressWrap'
+            );
 
             const payload = {
                 video: video,
@@ -2179,7 +2274,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 alert("Error: " + err.message);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `💾 <span data-i18n="btnApplyReframe">${I18N[currentLang].btnApplyReframe}</span>`;
+                const textEl = document.getElementById('reframeBtnText');
+                if (textEl) textEl.innerHTML = `💾 <span data-i18n="btnApplyReframe">${I18N[currentLang].btnApplyReframe}</span>`;
             }
         }
 
@@ -2237,6 +2333,54 @@ def build_style_from_payload(data: dict) -> SubStylePreset:
     )
 
 
+# Thread-safe global progress state for real-time frontend tracking
+_PROGRESS_LOCK = threading.Lock()
+_GLOBAL_PROGRESS = {
+    "active": False,
+    "type": "",          # "main" or "reframe"
+    "percent": 0.0,
+    "stage": "idle",     # "init", "whisper", "face_track", "nvenc", "done", "error"
+    "message": "",
+    "cur_sec": 0.0,
+    "total_sec": 0.0,
+    "speed": "1.0x",
+    "done": False,
+    "error": None,
+    "timestamp": 0.0
+}
+
+
+def set_progress(
+    active: bool = True,
+    job_type: str = "main",
+    percent: float = 0.0,
+    stage: str = "",
+    message: str = "",
+    cur_sec: float = 0.0,
+    total_sec: float = 0.0,
+    speed: str = "1.0x",
+    done: bool = False,
+    error: Optional[str] = None
+):
+    with _PROGRESS_LOCK:
+        _GLOBAL_PROGRESS["active"] = active
+        _GLOBAL_PROGRESS["type"] = job_type
+        _GLOBAL_PROGRESS["percent"] = round(float(percent), 1)
+        _GLOBAL_PROGRESS["stage"] = stage
+        _GLOBAL_PROGRESS["message"] = message
+        _GLOBAL_PROGRESS["cur_sec"] = round(float(cur_sec), 2)
+        _GLOBAL_PROGRESS["total_sec"] = round(float(total_sec), 2)
+        _GLOBAL_PROGRESS["speed"] = speed
+        _GLOBAL_PROGRESS["done"] = done
+        _GLOBAL_PROGRESS["error"] = error
+        _GLOBAL_PROGRESS["timestamp"] = time.time()
+
+
+def get_progress() -> dict:
+    with _PROGRESS_LOCK:
+        return dict(_GLOBAL_PROGRESS)
+
+
 class SubHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -2248,6 +2392,9 @@ class SubHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(HTML_CONTENT.encode("utf-8"))
+        elif parsed.path == "/api/progress":
+            self._send_json(get_progress())
+            return
         elif parsed.path in ["/api/get_preview_video", "/api/get_reframe_preview"]:
             target = PREVIEW_FILE if parsed.path == "/api/get_preview_video" else REFRAME_PREVIEW_FILE
             if os.path.exists(target):
@@ -2263,6 +2410,21 @@ class SubHandler(BaseHTTPRequestHandler):
             else:
                 self.send_response(404)
                 self.end_headers()
+        elif parsed.path == "/api/check_cache":
+            query = urllib.parse.parse_qs(parsed.query)
+            vpath = query.get("video", [""])[0].strip(' "')
+            cached = False
+            if vpath and os.path.exists(vpath):
+                from transcriber import load_cached_timings
+                cached_data = load_cached_timings(vpath, "fr", "large-v3-turbo") or load_cached_timings(vpath, None, "large-v3-turbo")
+                if cached_data:
+                    cached = True
+                else:
+                    base_name = os.path.splitext(vpath)[0]
+                    if os.path.exists(f"{base_name}_transcribed.srt"):
+                        cached = True
+            self._send_json({"cached": cached})
+            return
         else:
             self.send_response(404)
             self.end_headers()
@@ -2315,13 +2477,31 @@ class SubHandler(BaseHTTPRequestHandler):
             width, height = vinfo["width"], vinfo["height"]
 
             if auto_transcribe or not srt_path:
-                from transcriber import transcribe_video
-                chunks, _ = transcribe_video(
-                    media_path=video_path,
-                    model_name=model_name,
-                    language=None if lang == "auto" else lang,
-                    max_words=words_per_chunk
-                )
+                from transcriber import transcribe_video, load_cached_timings
+                actual_lang = None if lang == "auto" else lang
+                cached = load_cached_timings(video_path, actual_lang, model_name)
+                if cached:
+                    chunks, _ = transcribe_video(
+                        media_path=video_path,
+                        model_name=model_name,
+                        language=actual_lang,
+                        max_words=words_per_chunk,
+                        use_cache=True
+                    )
+                else:
+                    base_name = os.path.splitext(video_path)[0]
+                    existing_srt = f"{base_name}_transcribed.srt"
+                    if os.path.exists(existing_srt):
+                        chunks = srt_to_chunks(existing_srt, max_words=words_per_chunk, is_file=True)
+                    else:
+                        # Fast 3-second preview: transcribe only audio snippet in ~0.2s
+                        chunks, _ = transcribe_video(
+                            media_path=video_path,
+                            model_name=model_name,
+                            language=actual_lang,
+                            max_words=words_per_chunk,
+                            duration_limit=3.0
+                        )
             else:
                 chunks = srt_to_chunks(srt_path, max_words=words_per_chunk, is_file=True)
 
@@ -2363,11 +2543,25 @@ class SubHandler(BaseHTTPRequestHandler):
             if preview_only:
                 output_path = REFRAME_PREVIEW_FILE
                 dur_limit = 3.0
+                cb = None
             else:
                 base_dir = os.path.dirname(video_path)
                 base_name = os.path.splitext(os.path.basename(video_path))[0]
                 output_path = os.path.join(base_dir, f"{base_name}_reframed_9x16.mp4")
                 dur_limit = None
+
+                set_progress(active=True, job_type="reframe", percent=2.0, stage="init", message="Analyzing video streams...")
+                if mode == "face_track":
+                    set_progress(active=True, job_type="reframe", percent=8.0, stage="face_track", message="OpenCV Face Tracking...")
+
+                def cb(nv_pct, cur_s, tot_s, spd):
+                    overall = 10.0 + (nv_pct / 100.0) * 88.0
+                    set_progress(
+                        active=True, job_type="reframe",
+                        percent=overall, stage="nvenc",
+                        message=f"GPU NVENC 9:16: {cur_s:.1f}s / {tot_s:.1f}s @ {spd}",
+                        cur_sec=cur_s, total_sec=tot_s, speed=spd
+                    )
 
             process_reframe(
                 video_path=video_path,
@@ -2380,13 +2574,18 @@ class SubHandler(BaseHTTPRequestHandler):
                 brightness=brightness,
                 vignette=vignette,
                 duration_limit=dur_limit,
-                use_gpu=True
+                use_gpu=True,
+                progress_callback=cb
             )
+
+            if not preview_only:
+                set_progress(active=False, job_type="reframe", percent=100.0, stage="done", message="Reframe complete!", done=True)
 
             self._send_json({"success": True, "outputPath": output_path})
         except Exception as e:
             import traceback
             print(f"[!] Reframe error: {traceback.format_exc()}")
+            set_progress(active=False, job_type="reframe", percent=0.0, stage="error", message=str(e), done=True, error=str(e))
             self._send_json({"success": False, "error": str(e)})
 
     def _handle_full_render(self, data: dict):
@@ -2411,19 +2610,35 @@ class SubHandler(BaseHTTPRequestHandler):
             base_name = os.path.splitext(video_path)[0]
             ass_path = f"{base_name}_submaxxing.ass"
 
+            set_progress(active=True, job_type="main", percent=2.0, stage="init", message="Reading video metadata...")
             log(f"[*] Reading video metadata: '{video_path}'...")
             vinfo = get_video_info(video_path)
             width, height, duration, fps = vinfo["width"], vinfo["height"], vinfo["duration"], vinfo["fps"]
             log(f"    Format: {width}x{height} | Duration: {duration:.2f}s | FPS: {fps:.2f}")
 
             if auto_transcribe or not srt_path:
-                log(f"[*] Running local Whisper '{model_name}' on GPU (language: {lang})...")
+                set_progress(active=True, job_type="main", percent=5.0, stage="whisper", message=f"Whisper AI '{model_name}' on GPU (CUDA)...")
+                log(f"[*] Local Whisper '{model_name}' on GPU (language: {lang})...")
                 from transcriber import transcribe_video
+                actual_lang = None if lang == "auto" else lang
+
+                def whisper_cb(cur_audio_s, tot_audio_s):
+                    if tot_audio_s > 0:
+                        w_pct = 5.0 + (cur_audio_s / tot_audio_s) * 23.0
+                        set_progress(
+                            active=True, job_type="main",
+                            percent=w_pct, stage="whisper",
+                            message=f"Whisper AI: {cur_audio_s:.1f}s / {tot_audio_s:.1f}s",
+                            cur_sec=cur_audio_s, total_sec=tot_audio_s
+                        )
+
                 chunks, srt_content = transcribe_video(
                     media_path=video_path,
                     model_name=model_name,
-                    language=None if lang == "auto" else lang,
-                    max_words=words_per_chunk
+                    language=actual_lang,
+                    max_words=words_per_chunk,
+                    use_cache=True,
+                    progress_callback=whisper_cb
                 )
                 saved_srt = f"{base_name}_transcribed.srt"
                 with open(saved_srt, "w", encoding="utf-8") as f:
@@ -2433,6 +2648,7 @@ class SubHandler(BaseHTTPRequestHandler):
                 if not os.path.exists(srt_path):
                     self._send_json({"success": False, "error": f"SRT file not found: '{srt_path}'"})
                     return
+                set_progress(active=True, job_type="main", percent=5.0, stage="srt", message="Parsing SRT subtitles...")
                 log(f"[*] Slicing SRT '{srt_path}' (max {words_per_chunk} words/chunk)...")
                 chunks = srt_to_chunks(srt_path, max_words=words_per_chunk, is_file=True)
                 log(f"[+] Sliced into {len(chunks)} chunks.")
@@ -2445,9 +2661,21 @@ class SubHandler(BaseHTTPRequestHandler):
                 f.write(ass_content)
             log(f"[+] ASS file created: '{ass_path}'")
 
+            start_pct = 30.0 if (auto_transcribe or not srt_path) else 6.0
+            span = 98.0 - start_pct
+
+            def render_cb(nv_pct, cur_s, tot_s, spd):
+                overall = start_pct + (nv_pct / 100.0) * span
+                set_progress(
+                    active=True, job_type="main",
+                    percent=overall, stage="nvenc",
+                    message=f"GPU NVENC: {cur_s:.1f}s / {tot_s:.1f}s @ {spd}",
+                    cur_sec=cur_s, total_sec=tot_s, speed=spd
+                )
+
             if render_type in ["overlay_mov", "both"]:
                 mov_out = f"{base_name}_overlay.mov"
-                log(f"[*] Rendering transparent ProRes 4444 overlay...")
+                log(f"[*] Rendering transparent ProRes 4444 overlay (multithreaded)...")
                 render_transparent_overlay(
                     ass_path=ass_path,
                     output_path=mov_out,
@@ -2455,13 +2683,14 @@ class SubHandler(BaseHTTPRequestHandler):
                     width=width,
                     height=height,
                     fps=fps,
-                    format_type="mov"
+                    format_type="mov",
+                    progress_callback=render_cb if render_type == "overlay_mov" else None
                 )
                 log(f"[+] ProRes 4444 overlay ready: '{mov_out}'")
 
             if render_type == "overlay_webm":
                 webm_out = f"{base_name}_overlay.webm"
-                log(f"[*] Rendering transparent WebM overlay...")
+                log(f"[*] Rendering transparent WebM overlay (VP9 multithreaded)...")
                 render_transparent_overlay(
                     ass_path=ass_path,
                     output_path=webm_out,
@@ -2469,7 +2698,8 @@ class SubHandler(BaseHTTPRequestHandler):
                     width=width,
                     height=height,
                     fps=fps,
-                    format_type="webm"
+                    format_type="webm",
+                    progress_callback=render_cb
                 )
                 log(f"[+] WebM overlay ready: '{webm_out}'")
 
@@ -2480,14 +2710,20 @@ class SubHandler(BaseHTTPRequestHandler):
                     video_path=video_path,
                     ass_path=ass_path,
                     output_path=final_mp4,
-                    use_gpu=True
+                    use_gpu=True,
+                    progress_callback=render_cb
                 )
                 log(f"[+] Final video rendered: '{final_mp4}'")
 
+            set_progress(active=False, job_type="main", percent=100.0, stage="done", message="Export complete!", done=True)
             log("\n🎉 Done successfully!")
             self._send_json({"success": True, "logs": "\n".join(logs)})
 
         except Exception as e:
+            import traceback
+            set_progress(active=False, job_type="main", percent=0.0, stage="error", message=str(e), done=True, error=str(e))
+            log(f"[!] Error: {traceback.format_exc()}")
+            self._send_json({"success": False, "error": str(e), "logs": "\n".join(logs)})
             import traceback
             log(f"[!] Error: {traceback.format_exc()}")
             self._send_json({"success": False, "error": str(e), "logs": "\n".join(logs)})

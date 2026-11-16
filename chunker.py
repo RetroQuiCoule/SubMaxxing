@@ -14,6 +14,11 @@ FRENCH_CLITICS = {
     "c’", "d’", "l’", "j’", "m’", "t’", "s’", "n’", "qu’", "jusqu’", "lorsqu’", "puisqu’"
 }
 
+_HTML_TAGS_RE = re.compile(r'<[^>]+>')
+_APOSTROPHE_SPACES_RE = re.compile(r"\b([cldjmstnq]|qu|jusqu|lorsqu|puisqu)['’]\s+", re.IGNORECASE)
+_WHITESPACE_RE = re.compile(r'\s+')
+_SRT_BLOCK_RE = re.compile(r'\n\s*\n')
+
 
 def parse_srt_timestamp(ts: str) -> float:
     """Converts '00:01:23,456' or '00:01:23.456' into seconds."""
@@ -30,10 +35,10 @@ def parse_srt_timestamp(ts: str) -> float:
 
 def clean_subtitle_text(text: str) -> str:
     """Removes HTML tags, heals French apostrophes with spaces, and cleans whitespace."""
-    text = re.sub(r'<[^>]+>', '', text)
+    text = _HTML_TAGS_RE.sub('', text)
     # Heal spaces after apostrophes in French (e.g. "c' est" -> "c'est", "d' accord" -> "d'accord")
-    text = re.sub(r"\b([cldjmstnq]|qu|jusqu|lorsqu|puisqu)['’]\s+", r"\1'", text, flags=re.IGNORECASE)
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = _APOSTROPHE_SPACES_RE.sub(r"\1'", text)
+    text = _WHITESPACE_RE.sub(' ', text).strip()
     return text
 
 
@@ -41,7 +46,7 @@ def parse_srt(srt_content: str) -> List[Tuple[float, float, str]]:
     """
     Parses SRT content into a list of (start_seconds, end_seconds, text).
     """
-    blocks = re.split(r'\n\s*\n', srt_content.strip())
+    blocks = _SRT_BLOCK_RE.split(srt_content.strip())
     entries = []
 
     for block in blocks:

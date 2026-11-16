@@ -64,6 +64,7 @@ Presets available:
     parser.add_argument("--overlay-only", action="store_true", help="Only generate transparent ProRes overlay")
     parser.add_argument("--overlay-format", choices=["mov", "webm"], default="mov", help="Overlay format (mov or webm)")
     parser.add_argument("--ass-only", action="store_true", help="Only output the generated .ass subtitle file")
+    parser.add_argument("--no-cache", action="store_true", help="Force recalculating Whisper transcription, ignoring cache")
     parser.add_argument("-o", "--output", help="Custom output video path")
 
     args = parser.parse_args()
@@ -93,7 +94,8 @@ Presets available:
             media_path=args.video,
             model_name=args.model,
             language=None if args.lang == "auto" else args.lang,
-            max_words=args.words_per_chunk
+            max_words=args.words_per_chunk,
+            use_cache=not args.no_cache
         )
         generated_srt_path = f"{base_name}_transcribed.srt"
         with open(generated_srt_path, "w", encoding="utf-8") as f:
