@@ -22,8 +22,11 @@ except Exception:
     pass
 
 import json
+import re
+import time
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 import urllib.parse
 from styles import PRESETS, SubStylePreset, chunks_to_ass
 from chunker import srt_to_chunks
@@ -66,6 +69,45 @@ HTML_CONTENT = """<!DOCTYPE html>
             --text-muted: #64748b;
             --neu-shadow: 6px 6px 16px rgba(0, 0, 0, 0.5), -4px -4px 12px rgba(255, 255, 255, 0.02);
             --neu-inset: inset 3px 3px 6px rgba(0, 0, 0, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.02);
+        }
+
+        /* Dynamic Reframe Purple Theme */
+        body.theme-reframe {
+            --bg: #0b0714;
+            --surface: #140d24;
+            --surface-raised: #1e1336;
+            --border: rgba(168, 85, 247, 0.16);
+            --border-highlight: rgba(168, 85, 247, 0.38);
+            --accent: #c084fc;
+            --accent-glow: rgba(192, 132, 252, 0.45);
+            --accent-grad: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            --neu-shadow: 6px 6px 18px rgba(0, 0, 0, 0.6), -4px -4px 12px rgba(168, 85, 247, 0.04);
+            --neu-inset: inset 3px 3px 6px rgba(0, 0, 0, 0.6), inset -2px -2px 5px rgba(168, 85, 247, 0.04);
+        }
+        body.theme-reframe .navbar {
+            border-color: rgba(168, 85, 247, 0.25);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 15px rgba(168, 85, 247, 0.12);
+        }
+        body.theme-reframe .brand-title {
+            background: linear-gradient(90deg, #ffffff 40%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        body.theme-reframe .brand-badge {
+            background: rgba(168, 85, 247, 0.18);
+            color: #d8b4fe;
+            border-color: rgba(168, 85, 247, 0.45);
+        }
+        body.theme-reframe .phone-wrapper {
+            border-color: rgba(168, 85, 247, 0.4);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 25px rgba(168, 85, 247, 0.2);
+        }
+        body.theme-reframe .btn-pill:hover {
+            border-color: #a855f7;
+            color: #d8b4fe;
+        }
+        body, .navbar, .card, .phone-wrapper {
+            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -435,6 +477,75 @@ HTML_CONTENT = """<!DOCTYPE html>
             z-index: 1;
         }
 
+        /* Reframe Phone Preview Elements */
+        .reframe-phone-video {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            display: none;
+            z-index: 1;
+            background: #000;
+        }
+        .reframe-vignette-overlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 2;
+            transition: box-shadow 0.2s ease;
+        }
+        .reframe-mode-badge {
+            position: absolute;
+            top: 14px; right: 14px;
+            background: rgba(15, 10, 25, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: #e9d5ff;
+            border: 1px solid rgba(168, 85, 247, 0.4);
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            z-index: 4;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        .reframe-placeholder {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 28px;
+            text-align: center;
+            z-index: 3;
+            background: radial-gradient(circle at center, rgba(168, 85, 247, 0.12) 0%, rgba(13, 8, 22, 0.96) 80%);
+        }
+        .reframe-ph-icon {
+            font-size: 3.2rem;
+            margin-bottom: 14px;
+            filter: drop-shadow(0 4px 14px rgba(168, 85, 247, 0.5));
+            animation: pulsePhIcon 3s ease-in-out infinite;
+        }
+        @keyframes pulsePhIcon {
+            0%, 100% { transform: scale(1); opacity: 0.9; }
+            50% { transform: scale(1.08); opacity: 1; }
+        }
+        .reframe-ph-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #f5f3ff;
+            margin-bottom: 8px;
+        }
+        .reframe-ph-desc {
+            font-size: 0.82rem;
+            line-height: 1.45;
+            color: #a78bfa;
+        }
+
         /* TikTok UI Overlay */
         .tiktok-overlay {
             position: absolute;
@@ -707,7 +818,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             </div>
             <div>
                 <span class="brand-title">SUBMAXXING</span>
-                <span class="brand-badge">STUDIO PRO</span>
+                <span class="brand-badge" id="brandBadge">STUDIO PRO</span>
             </div>
         </a>
 
@@ -742,7 +853,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                                     📁 <span data-i18n="browseVideo">Browse Video...</span>
                                 </button>
                                 <button type="button" class="btn-reframe-trigger" onclick="openReframeView()">
-                                    📐 <span data-i18n="reframeBtn">Reframe 16:9 → 9:16</span>
+                                    📐 <span data-i18n="reframeBtn">Reframe</span>
                                 </button>
                                 <div class="file-badge" id="videoBadge" data-i18n="noVideoSelected">No video selected</div>
                             </div>
@@ -1147,11 +1258,14 @@ HTML_CONTENT = """<!DOCTYPE html>
                         <div class="card-title-left" data-i18n="reframePreviewTitle">📱 9:16 Reframed Output Preview</div>
                     </div>
 
-                    <div class="phone-wrapper" id="reframePhoneWrapper" style="display:flex; align-items:center; justify-content:center;">
-                        <video id="reframePlayer" style="width:100%; height:100%; object-fit:cover;" controls autoplay loop playsinline></video>
-                        <div id="reframePlaceholder" style="text-align:center; padding:20px; color:var(--text-muted);">
-                            <div style="font-size:2.5rem; margin-bottom:10px;">📐</div>
-                            <div data-i18n="reframePlaceholderText">Select a 16:9 video and click preview to inspect framing.</div>
+                    <div class="phone-wrapper" id="reframePhoneWrapper">
+                        <video id="reframePlayer" class="reframe-phone-video" controls autoplay loop playsinline></video>
+                        <div id="reframeVignetteOverlay" class="reframe-vignette-overlay"></div>
+                        <div id="reframeModeBadge" class="reframe-mode-badge">🎯 Smart Face Track</div>
+                        <div id="reframePlaceholder" class="reframe-placeholder">
+                            <div class="reframe-ph-icon">📐</div>
+                            <div class="reframe-ph-title" data-i18n="reframePlaceholderTitle">9:16 Canvas Ready</div>
+                            <div class="reframe-ph-desc" data-i18n="reframePlaceholderText">Select a video and click "Preview Reframed Clip" to inspect AI framing & adjustments.</div>
                         </div>
                     </div>
 
@@ -1173,7 +1287,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 section1Title: "📁 1. Video & Subtitles",
                 videoLabel: "9:16 Video (MP4 / MOV):",
                 browseVideo: "Browse Video...",
-                reframeBtn: "Reframe 16:9 → 9:16",
+                reframeBtn: "Reframe",
                 noVideoSelected: "No video selected",
                 transcribeCheckbox: "🎙️ <b>Transcribe with Local Whisper</b> (large-v3-turbo on RTX GPU)",
                 srtLabel: "Existing SRT Subtitles (e.g. Buzz Whisper):",
@@ -1228,7 +1342,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 vignetteLabel: "Vignette (Focus border):",
                 btnApplyReframe: "Apply Reframe & Return To Subtitles",
                 reframePreviewTitle: "📱 9:16 Reframed Output Preview",
-                reframePlaceholderText: "Select a 16:9 video and click preview to inspect framing.",
+                reframePlaceholderTitle: "9:16 Canvas Ready",
+                reframePlaceholderText: "Select a video and click \"Preview Reframed Clip\" to inspect AI framing & adjustments.",
                 btnPreviewReframe: "Preview Reframed Clip (3s)",
                 previewReframeDesc: "Fast GPU render with face tracking & color grading in ~0.5s.",
                 statusStart: "[*] Processing started locally...",
@@ -1239,7 +1354,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 section1Title: "📁 1. Vidéo & Sous-titres",
                 videoLabel: "Vidéo 9:16 (MP4 / MOV) :",
                 browseVideo: "Parcourir Vidéo...",
-                reframeBtn: "Reframe 16:9 → 9:16",
+                reframeBtn: "Reframe",
                 noVideoSelected: "Aucune vidéo sélectionnée",
                 transcribeCheckbox: "🎙️ <b>Générer avec Whisper local</b> (large-v3-turbo sur GPU RTX)",
                 srtLabel: "Fichier SRT existant (ex: export Buzz Whisper) :",
@@ -1294,7 +1409,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 vignetteLabel: "Vignettage (Assombrir bords) :",
                 btnApplyReframe: "Appliquer le Reframe & Revenir aux Sous-titres",
                 reframePreviewTitle: "📱 Aperçu du Rendu 9:16",
-                reframePlaceholderText: "Sélectionnez une vidéo 16:9 et cliquez sur prévisualiser.",
+                reframePlaceholderTitle: "Canevas 9:16 Prêt",
+                reframePlaceholderText: "Sélectionnez une vidéo et cliquez sur \"Prévisualiser l'extrait\" pour inspecter le cadrage IA et les retouches.",
                 btnPreviewReframe: "Prévisualiser l'extrait (3s)",
                 previewReframeDesc: "Rendu GPU rapide avec détection faciale & retouches en ~0.5s.",
                 statusStart: "[*] Lancement du traitement local...",
@@ -1328,6 +1444,21 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('viewSubtitles').className = 'view-section' + (viewName === 'subtitles' ? ' active' : '');
             document.getElementById('viewReframe').className = 'view-section' + (viewName === 'reframe' ? ' active' : '');
             document.getElementById('navBackBtn').style.display = (viewName === 'reframe') ? 'inline-flex' : 'none';
+
+            const badge = document.getElementById('brandBadge');
+            if (viewName === 'reframe') {
+                document.body.classList.add('theme-reframe');
+                if (badge) badge.innerText = 'REFRAME STUDIO';
+                const currentVid = document.getElementById('videoPath').value;
+                if (currentVid) {
+                    setReframeVideo(currentVid);
+                }
+                updateReframePreview();
+            } else {
+                document.body.classList.remove('theme-reframe');
+                if (badge) badge.innerText = 'STUDIO PRO';
+                updateMockup();
+            }
         }
 
         function openReframeView() {
@@ -1714,17 +1845,42 @@ HTML_CONTENT = """<!DOCTYPE html>
             document.getElementById('brightnessVal').innerText = (brightness >= 0 ? '+' : '') + `${brightness}%`;
             document.getElementById('vignetteVal').innerText = `${vignette}%`;
 
+            // Live CSS Filter on player
             const player = document.getElementById('reframePlayer');
             const cVal = 1 + (contrast / 100);
             const sVal = 1 + (saturation / 100);
             const bVal = 1 + (brightness / 100);
             player.style.filter = `contrast(${cVal}) saturate(${sVal}) brightness(${bVal})`;
+
+            // Live Vignette Overlay Shadow
+            const vigOverlay = document.getElementById('reframeVignetteOverlay');
+            if (vigOverlay) {
+                if (vignette > 0) {
+                    const blur = (vignette / 100) * 120 + 20;
+                    const spread = (vignette / 100) * 60;
+                    const opacity = Math.min(0.92, (vignette / 100) * 1.05);
+                    vigOverlay.style.boxShadow = `inset 0 0 ${blur}px ${spread}px rgba(0, 0, 0, ${opacity})`;
+                } else {
+                    vigOverlay.style.boxShadow = 'none';
+                }
+            }
+
+            // Update Mode Badge text
+            const modeBadge = document.getElementById('reframeModeBadge');
+            const modeNames = {
+                face_track: '🎯 Smart Face Track',
+                split_screen: '👥 Podcast Split-Screen',
+                blurred_bg: '🌌 Blurred Background',
+                center: '⏹️ Fixed Center',
+                manual: '🖐️ Manual Pan'
+            };
+            if (modeBadge) modeBadge.innerText = modeNames[mode] || mode;
         }
 
         async function generateReframe3sPreview() {
             const video = document.getElementById('videoPath').value.trim();
             if (!video) {
-                alert(currentLang === 'fr' ? "Veuillez sélectionner une vidéo 16:9." : "Please select a 16:9 video first.");
+                alert(currentLang === 'fr' ? "Veuillez sélectionner une vidéo d'abord." : "Please select a video first.");
                 return;
             }
 
@@ -1756,7 +1912,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                     const player = document.getElementById('reframePlayer');
                     player.style.display = 'block';
                     player.src = `/api/get_reframe_preview?t=${Date.now()}`;
-                    player.play();
+                    player.load();
+                    player.play().catch(() => {});
                 } else {
                     alert("Error: " + data.error);
                 }
@@ -1887,25 +2044,10 @@ class SubHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(HTML_CONTENT.encode("utf-8"))
-        elif parsed.path == "/api/get_preview_video":
-            if os.path.exists(PREVIEW_FILE):
-                self.send_response(200)
-                self.send_header("Content-Type", "video/mp4")
-                self.send_header("Content-Length", str(os.path.getsize(PREVIEW_FILE)))
-                self.end_headers()
-                with open(PREVIEW_FILE, "rb") as f:
-                    self.wfile.write(f.read())
-            else:
-                self.send_response(404)
-                self.end_headers()
-        elif parsed.path == "/api/get_reframe_preview":
-            if os.path.exists(REFRAME_PREVIEW_FILE):
-                self.send_response(200)
-                self.send_header("Content-Type", "video/mp4")
-                self.send_header("Content-Length", str(os.path.getsize(REFRAME_PREVIEW_FILE)))
-                self.end_headers()
-                with open(REFRAME_PREVIEW_FILE, "rb") as f:
-                    self.wfile.write(f.read())
+        elif parsed.path in ["/api/get_preview_video", "/api/get_reframe_preview"]:
+            target = PREVIEW_FILE if parsed.path == "/api/get_preview_video" else REFRAME_PREVIEW_FILE
+            if os.path.exists(target):
+                self._serve_video_file(target)
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -2138,6 +2280,34 @@ class SubHandler(BaseHTTPRequestHandler):
             log(f"[!] Error: {traceback.format_exc()}")
             self._send_json({"success": False, "error": str(e), "logs": "\n".join(logs)})
 
+    def _serve_video_file(self, file_path: str):
+        size = os.path.getsize(file_path)
+        range_header = self.headers.get("Range")
+        if range_header:
+            m = re.match(r"bytes=(\d+)-(\d*)", range_header)
+            if m:
+                start = int(m.group(1))
+                end = int(m.group(2)) if m.group(2) else size - 1
+                length = end - start + 1
+                self.send_response(206)
+                self.send_header("Content-Type", "video/mp4")
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+                self.send_header("Content-Length", str(length))
+                self.send_header("Accept-Ranges", "bytes")
+                self.end_headers()
+                with open(file_path, "rb") as f:
+                    f.seek(start)
+                    self.wfile.write(f.read(length))
+                return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "video/mp4")
+        self.send_header("Content-Length", str(size))
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+        with open(file_path, "rb") as f:
+            self.wfile.write(f.read())
+
     def _send_json(self, data: dict):
         self.send_response(200)
         self.send_header("Content-type", "application/json; charset=utf-8")
@@ -2145,9 +2315,33 @@ class SubHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data).encode("utf-8"))
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 def run_server():
-    server = HTTPServer(("127.0.0.1", PORT), SubHandler)
-    url = f"http://127.0.0.1:{PORT}"
+    server = None
+    try:
+        server = ThreadedHTTPServer(("127.0.0.1", PORT), SubHandler)
+    except OSError:
+        print(f"[!] Port {PORT} in use, clearing previous process...")
+        try:
+            import subprocess
+            out = subprocess.check_output(f'netstat -ano | findstr :{PORT}', shell=True, text=True)
+            for line in out.strip().splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 5 and f":{PORT}" in parts[1]:
+                    pid = parts[-1]
+                    if pid != str(os.getpid()):
+                        subprocess.run(f"taskkill /f /pid {pid}", shell=True, capture_output=True)
+            time.sleep(0.5)
+            server = ThreadedHTTPServer(("127.0.0.1", PORT), SubHandler)
+        except Exception:
+            server = ThreadedHTTPServer(("127.0.0.1", 0), SubHandler)
+
+    bound_port = server.server_address[1]
+    url = f"http://127.0.0.1:{bound_port}"
     print(f"\n=======================================================")
     print(f"⚡ Submaxxing Studio Pro is live!")
     print(f"👉 Open in your browser: {url}")

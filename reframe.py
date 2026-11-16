@@ -91,31 +91,40 @@ def build_reframe_filter_chain(
     saturation: float = 1.0,
     brightness: float = 0.0,
     vignette: float = 0.0,
-) -> str:
+) -> Tuple[str, bool]:
     """
     Builds the complete FFmpeg video filter for reframing and color enhancements.
+    Returns (filter_string, is_complex).
     """
     crop_w = int(video_h * 9 / 16)
-    filters = []
 
-    # 1. Base Framing
-    if mode in ["face_track", "center", "manual"]:
-        # Crop 9:16 slice and scale to 1080x1920
-        filters.append(f"crop={crop_w}:{video_h}:{crop_x}:0,scale=1080:1920")
+    # Grading parts
+    adj_parts = []
+    if contrast != 1.0 or saturation != 1.0 or brightness != 0.0:
+        adj_parts.append(f"eq=contrast={contrast:.2f}:saturation={saturation:.2f}:brightness={brightness:.2f}")
 
-    elif mode == "blurred_bg":
-        # Full 16:9 centered with blurred background
+    if sharpness > 0.0:
+        s_val = min(2.0, sharpness * 1.5)
+        adj_parts.append(f"unsharp=5:5:{s_val:.2f}:5:5:0.0")
+
+    if vignette > 0.0:
+        angle_val = max(0.2, min(1.5, vignette * 1.2))
+        adj_parts.append(f"vignette=PI/{angle_val:.2f}")
+
+    if mode == "blurred_bg":
         filter_complex = (
             f"[0:v]split=2[bg][fg];"
             f"[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[blurred];"
             f"[fg]scale=1080:-1[crisp];"
             f"[blurred][crisp]overlay=(W-w)/2:(H-h)/2"
         )
-        # Note: blurred_bg is a filter_complex
-        return filter_complex
+        if adj_parts:
+            filter_complex += f"[base];[base]{','.join(adj_parts)}[outv]"
+        else:
+            filter_complex += "[outv]"
+        return filter_complex, True
 
     elif mode == "split_screen":
-        # Dual speaker split: Left half on top, Right half on bottom
         left_crop_x = max(0, int(video_w * 0.15))
         right_crop_x = min(video_w - crop_w, int(video_w * 0.55))
         filter_complex = (
@@ -124,27 +133,18 @@ def build_reframe_filter_chain(
             f"[bot_in]crop={crop_w}:{video_h}:{right_crop_x}:0,scale=1080:960[bottom];"
             f"[top][bottom]vstack=inputs=2"
         )
-        return filter_complex
+        if adj_parts:
+            filter_complex += f"[base];[base]{','.join(adj_parts)}[outv]"
+        else:
+            filter_complex += "[outv]"
+        return filter_complex, True
 
-    # 2. Adjustments (Color grading)
-    adj_parts = []
-    if contrast != 1.0 or saturation != 1.0 or brightness != 0.0:
-        adj_parts.append(f"eq=contrast={contrast:.2f}:saturation={saturation:.2f}:brightness={brightness:.2f}")
-
-    if sharpness > 0.0:
-        # Unsharp mask
-        s_val = min(2.0, sharpness * 1.5)
-        adj_parts.append(f"unsharp=5:5:{s_val:.2f}:5:5:0.0")
-
-    if vignette > 0.0:
-        # Vignette effect
-        angle_val = max(0.1, min(1.5, vignette * 1.2))
-        adj_parts.append(f"vignette=PI/{angle_val:.2f}")
-
-    if adj_parts:
-        filters.extend(adj_parts)
-
-    return ",".join(filters)
+    else:
+        # Standard crop (face_track, center, manual)
+        filters = [f"crop={crop_w}:{video_h}:{crop_x}:0,scale=1080:1920"]
+        if adj_parts:
+            filters.extend(adj_parts)
+        return ",".join(filters), False
 
 
 def process_reframe(
@@ -183,7 +183,7 @@ def process_reframe(
     else:
         crop_x = max(0, (video_w - crop_w) // 2)
 
-    filter_str = build_reframe_filter_chain(
+    filter_str, is_complex = build_reframe_filter_chain(
         mode=mode,
         video_w=video_w,
         video_h=video_h,
@@ -198,23 +198,33 @@ def process_reframe(
     ffmpeg = get_ffmpeg_path()
     dur_args = ["-ss", "0", "-t", str(duration_limit)] if duration_limit else []
 
-    # Choose between -vf and -filter_complex
-    is_complex = mode in ["blurred_bg", "split_screen"]
-    filter_flag = "-filter_complex" if is_complex else "-vf"
-
     codec = "h264_nvenc" if use_gpu else "libx264"
     preset_args = ["-preset", "p5", "-cq", "19"] if use_gpu else ["-preset", "fast", "-crf", "20"]
 
-    cmd = [
-        ffmpeg, "-y"
-    ] + dur_args + [
-        "-i", video_path,
-        filter_flag, filter_str,
-        "-c:v", codec
-    ] + preset_args + [
-        "-c:a", "copy",
-        output_path
-    ]
+    if is_complex:
+        cmd = [
+            ffmpeg, "-y"
+        ] + dur_args + [
+            "-i", video_path,
+            "-filter_complex", filter_str,
+            "-map", "[outv]",
+            "-map", "0:a?",
+            "-c:v", codec
+        ] + preset_args + [
+            "-c:a", "copy",
+            output_path
+        ]
+    else:
+        cmd = [
+            ffmpeg, "-y"
+        ] + dur_args + [
+            "-i", video_path,
+            "-vf", filter_str,
+            "-c:v", codec
+        ] + preset_args + [
+            "-c:a", "copy",
+            output_path
+        ]
 
     print(f"[*] Reframing 16:9 -> 9:16 (Mode: {mode}, GPU: {use_gpu})...")
     res = subprocess.run(cmd, capture_output=True, text=True)
