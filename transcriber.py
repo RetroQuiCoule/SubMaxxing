@@ -45,7 +45,7 @@ except Exception:
 
 from faster_whisper import WhisperModel
 from styles import WordTiming, SubChunk
-from chunker import group_words_into_chunks, merge_french_elisions
+from chunker import group_words_into_chunks, merge_french_elisions, split_sentence_into_word_timings
 
 
 # Global Cache & Concurrency Lock
@@ -132,6 +132,90 @@ def _get_disk_cache_path(media_path: str) -> str:
     safe_name = "".join(c for c in base_name if c.isalnum() or c in ("-", "_"))[:30] or "media"
     path_hash = hashlib.sha256(media_abs.encode("utf-8")).hexdigest()[:16]
     return os.path.join(cache_dir, f"{safe_name}_{path_hash}.json")
+
+
+def get_cache_info() -> Dict[str, Any]:
+    """Returns details on the current Whisper transcription cache and temporary files."""
+    cache_dir = _get_cache_dir()
+    files = []
+    total_bytes = 0
+    if os.path.exists(cache_dir):
+        for f in os.listdir(cache_dir):
+            if f.endswith(".json"):
+                fp = os.path.join(cache_dir, f)
+                try:
+                    sz = os.path.getsize(fp)
+                    total_bytes += sz
+                    files.append(f)
+                except Exception:
+                    pass
+
+    # Also count temp preview files
+    td = tempfile.gettempdir()
+    temp_files = []
+    try:
+        for f in os.listdir(td):
+            if f.startswith("submaxxing_"):
+                fp = os.path.join(td, f)
+                try:
+                    sz = os.path.getsize(fp)
+                    total_bytes += sz
+                    temp_files.append(f)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    return {
+        "cache_dir": cache_dir,
+        "count": len(files),
+        "temp_count": len(temp_files),
+        "size_bytes": total_bytes,
+        "size_mb": round(total_bytes / (1024 * 1024), 2),
+    }
+
+
+def clear_submaxxing_cache() -> int:
+    """Clears all persistent Whisper transcriptions and temporary preview files."""
+    global _TRANSCRIPTION_MEMORY_CACHE
+    _TRANSCRIPTION_MEMORY_CACHE.clear()
+
+    deleted = 0
+    cache_dir = _get_cache_dir()
+    if os.path.exists(cache_dir):
+        for f in os.listdir(cache_dir):
+            if f.endswith(".json"):
+                fp = os.path.join(cache_dir, f)
+                try:
+                    os.remove(fp)
+                    deleted += 1
+                except Exception:
+                    pass
+
+    # Clean up temp preview files from system tempdir
+    td = tempfile.gettempdir()
+    try:
+        for f in os.listdir(td):
+            if f.startswith("submaxxing_"):
+                fp = os.path.join(td, f)
+                try:
+                    os.remove(fp)
+                    deleted += 1
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Also clean up any legacy in-workspace preview files if left over
+    for legacy_f in ["web_preview.mp4", "web_preview.ass"]:
+        if os.path.exists(legacy_f):
+            try:
+                os.remove(legacy_f)
+                deleted += 1
+            except Exception:
+                pass
+
+    return deleted
 
 
 def load_cached_timings(media_path: str, language: Optional[str], model_name: str) -> Optional[Tuple[List[WordTiming], str]]:
@@ -283,25 +367,25 @@ def transcribe_video(
                 for w in segment.words:
                     cleaned_word = w.word.strip()
                     if cleaned_word:
+                        w_start = float(w.start)
+                        w_end = max(w_start + 0.05, float(w.end))
                         all_word_timings.append(WordTiming(
                             word=cleaned_word,
-                            start=w.start,
-                            end=w.end
+                            start=w_start,
+                            end=w_end
                         ))
             else:
-                words = segment.text.strip().split()
-                if words:
-                    seg_dur = max(0.1, segment.end - segment.start)
-                    per_word = seg_dur / len(words)
-                    for i, w in enumerate(words):
-                        all_word_timings.append(WordTiming(
-                            word=w,
-                            start=segment.start + i * per_word,
-                            end=segment.start + (i + 1) * per_word
-                        ))
+                seg_words = split_sentence_into_word_timings(segment.start, segment.end, segment.text)
+                all_word_timings.extend(seg_words)
 
-        # Merge French clitics (c', d', l', j', qu') so they are never isolated
+        # Merge French clitics (c', d', l', j', qu') & contractions so words are never fragmented
         all_word_timings = merge_french_elisions(all_word_timings)
+
+        # Guarantee non-overlapping, strictly monotonic timestamps
+        for i in range(len(all_word_timings) - 1):
+            if all_word_timings[i].end > all_word_timings[i + 1].start:
+                all_word_timings[i].end = all_word_timings[i + 1].start
+
         chunks = group_words_into_chunks(all_word_timings, max_words=max_words)
 
         for i, c in enumerate(chunks, start=1):

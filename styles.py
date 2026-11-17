@@ -197,7 +197,7 @@ def build_ass_header(preset: SubStylePreset, play_res_x: int = 1080, play_res_y:
     header = f"""[Script Info]
 Title: Submaxxing TikTok Subtitles
 ScriptType: v4.00+
-WrapStyle: 0
+WrapStyle: 2
 ScaledBorderAndShadow: yes
 YCbCr Matrix: TV.709
 PlayResX: {play_res_x}
@@ -205,7 +205,7 @@ PlayResY: {play_res_y}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{preset.font_name},{preset.font_size},{pri_col},{sec_col},{out_col},{sha_col},-1,0,0,0,100,100,0,0,1,{preset.outline_width},{preset.shadow_depth},{alignment},60,60,{preset.margin_v},1
+Style: Default,{preset.font_name},{preset.font_size},{pri_col},{sec_col},{out_col},{sha_col},-1,0,0,0,100,100,0,0,1,{preset.outline_width},{preset.shadow_depth},{alignment},40,40,{preset.margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -230,12 +230,24 @@ class SubChunk:
 def generate_dialogue_line(chunk: SubChunk, active_idx: int, preset: SubStylePreset) -> str:
     """
     Renders an ASS Dialogue line where `active_idx` within `chunk.words` is highlighted.
-    Fixes the fade bug by applying fade smoothly at chunk boundaries, not flickering per word.
+    Fixes flickering by ensuring smooth, continuous word-to-word transitions within the phrase,
+    so the highlighted word accurately tracks the speaker's vocal progression.
     """
     active_word = chunk.words[active_idx]
-    start_str = format_ass_time(active_word.start)
-    end_str = format_ass_time(active_word.end)
-    word_dur_ms = max(50, int((active_word.end - active_word.start) * 1000))
+    start_sec = active_word.start
+
+    if active_idx < len(chunk.words) - 1:
+        # Next word in same chunk: active word stays highlighted until the speaker speaks the next word!
+        # Eliminates inter-word subtitle blackouts and synchronizes highlight transition to exact acoustic onset.
+        next_word = chunk.words[active_idx + 1]
+        end_sec = max(start_sec + 0.08, next_word.start)
+    else:
+        # Last word in chunk: displays until word ends, with at least 150ms hold so short final words don't vanish
+        end_sec = max(start_sec + 0.15, active_word.end)
+
+    start_str = format_ass_time(start_sec)
+    end_str = format_ass_time(end_sec)
+    word_dur_ms = max(50, int((end_sec - start_sec) * 1000))
 
     pri_ass = hex_to_ass_color(preset.primary_color)
     high_ass = hex_to_ass_color(preset.highlight_color)
@@ -270,6 +282,15 @@ def generate_dialogue_line(chunk: SubChunk, active_idx: int, preset: SubStylePre
     line_prefix = "{" + "".join(tags) + "}"
 
     # 2. Build words with active word highlighted and animated
+    # Pre-calculate deterministic line break to prevent mid-animation line jumping
+    total_chars = sum(len(w.word) for w in chunk.words)
+    num_words = len(chunk.words)
+    split_after_idx = -1
+    if num_words >= 3 and total_chars >= 18:
+        split_after_idx = (num_words // 2) - 1
+    elif num_words == 2 and total_chars >= 26:
+        split_after_idx = 0
+
     formatted_words = []
     scale = max(100, preset.anim_scale)
     speed = max(40, min(300, preset.anim_speed_ms))
@@ -286,7 +307,20 @@ def generate_dialogue_line(chunk: SubChunk, active_idx: int, preset: SubStylePre
         else:
             formatted_words.append(raw_text)
 
-    line_text = " ".join(formatted_words)
+        if i == split_after_idx:
+            formatted_words.append("\\N")
+
+    # Assemble line text cleanly without awkward spaces around \\N
+    line_text = ""
+    for token in formatted_words:
+        if token == "\\N":
+            line_text = line_text.rstrip() + "\\N"
+        else:
+            if line_text and not line_text.endswith("\\N"):
+                line_text += " " + token
+            else:
+                line_text += token
+
     full_text = f"{line_prefix}{line_text}"
 
     return f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{full_text}"

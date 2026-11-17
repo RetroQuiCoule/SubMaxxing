@@ -67,6 +67,8 @@ Presets available:
     parser.add_argument("--ass-only", action="store_true", help="Only output the generated .ass subtitle file")
     parser.add_argument("--export-subs", "--keep-subs", dest="export_subs", action="store_true", help="Also export raw .srt and .ass subtitle files next to video (clean by default)")
     parser.add_argument("--no-cache", action="store_true", help="Force recalculating Whisper transcription, ignoring cache")
+    parser.add_argument("--no-compress", action="store_true", help="Disable default web/TikTok video compression")
+    parser.add_argument("--crf", type=int, default=22, help="Constant Rate Factor / Quality for compression (default: 22)")
     parser.add_argument("-o", "--output", help="Custom output video path")
 
     args = parser.parse_args()
@@ -177,7 +179,9 @@ Presets available:
             video_path=args.video,
             ass_path=ass_path,
             output_path=final_output,
-            use_gpu=True
+            use_gpu=True,
+            compress=not args.no_compress,
+            crf=args.crf
         )
         print(f"\n🎉 SUCCESS: Video rendered successfully to '{final_output}'!")
 

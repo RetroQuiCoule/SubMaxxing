@@ -29,6 +29,12 @@ _CASCADE_FRONTAL = None
 _CASCADE_PROFILE = None
 
 
+def clear_reframe_cache():
+    """Clears the in-memory face tracking trajectory cache."""
+    global _TRAJECTORY_CACHE
+    _TRAJECTORY_CACHE.clear()
+
+
 def _get_cascades():
     global _CASCADE_FRONTAL, _CASCADE_PROFILE
     if _CASCADE_FRONTAL is None:
@@ -38,34 +44,59 @@ def _get_cascades():
     return _CASCADE_FRONTAL, _CASCADE_PROFILE
 
 
-def detect_face_in_frame(gray_small: Any) -> Optional[Tuple[int, int, int, int]]:
+def detect_all_faces_in_frame(gray_small: Any) -> List[Tuple[int, int, int, int]]:
     """
-    Detects the speaker face using frontal, profile, and flipped-profile classifiers.
-    Returns (x, y, w, h) of the dominant face, or None.
+    Detects all candidate speaker faces using frontal, profile, and flipped-profile classifiers.
+    Merges heavily overlapping boxes (NMS) and returns a list of (x, y, w, h).
     """
     c_front, c_prof = _get_cascades()
+    all_faces: List[Tuple[int, int, int, int]] = []
 
     # 1. Frontal & semi-profile face (alt2 is vastly superior for angled faces)
-    faces = c_front.detectMultiScale(gray_small, scaleFactor=1.15, minNeighbors=3, minSize=(25, 25))
-    if len(faces) > 0:
-        return max(faces, key=lambda b: b[2] * b[3])
+    f_front = c_front.detectMultiScale(gray_small, scaleFactor=1.15, minNeighbors=3, minSize=(25, 25))
+    if len(f_front) > 0:
+        all_faces.extend([tuple(b) for b in f_front])
 
     # 2. Profile face (looking sideways)
-    faces = c_prof.detectMultiScale(gray_small, scaleFactor=1.15, minNeighbors=3, minSize=(25, 25))
-    if len(faces) > 0:
-        return max(faces, key=lambda b: b[2] * b[3])
+    f_prof = c_prof.detectMultiScale(gray_small, scaleFactor=1.15, minNeighbors=3, minSize=(25, 25))
+    if len(f_prof) > 0:
+        all_faces.extend([tuple(b) for b in f_prof])
 
     # 3. Opposite profile face (flipped horizontally)
     flipped = cv2.flip(gray_small, 1)
-    faces_f = c_prof.detectMultiScale(flipped, scaleFactor=1.15, minNeighbors=3, minSize=(25, 25))
-    if len(faces_f) > 0:
-        best_f = max(faces_f, key=lambda b: b[2] * b[3])
+    f_flip = c_prof.detectMultiScale(flipped, scaleFactor=1.15, minNeighbors=3, minSize=(25, 25))
+    if len(f_flip) > 0:
         w_img = gray_small.shape[1]
-        fx, fy, fw, fh = best_f
-        # Unflip coordinates back to original image space
-        return (w_img - fx - fw, fy, fw, fh)
+        for (fx, fy, fw, fh) in f_flip:
+            all_faces.append((w_img - fx - fw, fy, fw, fh))
 
-    return None
+    if not all_faces:
+        return []
+
+    # Non-maximum suppression: merge boxes representing the same face
+    boxes = sorted(all_faces, key=lambda b: b[2] * b[3], reverse=True)
+    kept: List[Tuple[int, int, int, int]] = []
+    for b in boxes:
+        bx, by, bw, bh = b
+        bcx = bx + bw / 2.0
+        overlap = False
+        for (kx, ky, kw, kh) in kept:
+            kcx = kx + kw / 2.0
+            if abs(bcx - kcx) < max(bw, kw) * 0.7:
+                overlap = True
+                break
+        if not overlap:
+            kept.append(b)
+
+    return kept
+
+
+def detect_face_in_frame(gray_small: Any) -> Optional[Tuple[int, int, int, int]]:
+    """
+    Detects the dominant speaker face. Backward compatible helper.
+    """
+    faces = detect_all_faces_in_frame(gray_small)
+    return faces[0] if faces else None
 
 
 def detect_face_trajectory(
@@ -77,8 +108,10 @@ def detect_face_trajectory(
 ) -> List[Tuple[float, float, bool]]:
     """
     Scans the video across time and extracts the speaker's horizontal center position.
-    Returns a list of (timestamp, center_x_pixel, was_detected_bool).
-    Features memory persistence so brief occlusions/blinks don't reset camera framing.
+    Features intelligent speaker locking with hysteresis:
+      - Prevents frantic jumping between two interlocuteurs by enforcing continuity preference
+      - Requires consistent multi-frame dominance (~0.9s) before panning to a new speaker
+      - Memory persistence so brief occlusions/blinks don't reset camera framing.
     Results are cached in memory for zero-latency subsequent operations.
     """
     if not os.path.exists(video_path):
@@ -110,10 +143,18 @@ def detect_face_trajectory(
     scale = target_w / max(1, v_w)
     target_h = max(1, int(v_h * scale))
 
+    crop_w = int(v_h * 9 / 16)
+    proximity_radius = crop_w * 0.45
+
     trajectory: List[Tuple[float, float, bool]] = []
     current_frame = 0
     last_known_x = v_w / 2.0
     has_ever_detected = False
+
+    # Speaker locking state
+    candidate_switch_x: Optional[float] = None
+    candidate_switch_frames = 0
+    SWITCH_CONFIRM_FRAMES = 7  # ~0.9s of sustained dominance before switching speaker
 
     while cap.isOpened() and current_frame < frames_to_scan:
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
@@ -125,14 +166,54 @@ def detect_face_trajectory(
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         small = cv2.resize(gray, (target_w, target_h))
 
-        face = detect_face_in_frame(small)
-        if face is not None:
-            fx, fy, fw, fh = face
-            cx = (fx + fw / 2.0) / scale
-            last_known_x = cx
-            has_ever_detected = True
-            trajectory.append((timestamp, float(cx), True))
+        faces = detect_all_faces_in_frame(small)
+        if faces:
+            # Score each candidate face with continuity inertia
+            scored_candidates = []
+            for (fx, fy, fw, fh) in faces:
+                cx = (fx + fw / 2.0) / scale
+                area = fw * fh
+                dist = abs(cx - last_known_x)
+                score = float(area)
+                if has_ever_detected and dist < proximity_radius:
+                    # Current speaker continuity bonus (favors staying on active speaker)
+                    score *= 1.85
+                scored_candidates.append((score, cx))
+
+            scored_candidates.sort(key=lambda s: s[0], reverse=True)
+            best_score, best_cx = scored_candidates[0]
+
+            if not has_ever_detected:
+                last_known_x = best_cx
+                has_ever_detected = True
+                candidate_switch_frames = 0
+                trajectory.append((timestamp, float(best_cx), True))
+            else:
+                dist_to_current = abs(best_cx - last_known_x)
+                if dist_to_current < proximity_radius:
+                    # Same speaker: smoothly update position
+                    last_known_x = last_known_x * 0.70 + best_cx * 0.30
+                    candidate_switch_frames = 0
+                    trajectory.append((timestamp, float(last_known_x), True))
+                else:
+                    # Different speaker detected: enforce hysteresis to prevent rapid flickering
+                    if candidate_switch_x is not None and abs(best_cx - candidate_switch_x) < proximity_radius:
+                        candidate_switch_frames += 1
+                    else:
+                        candidate_switch_x = best_cx
+                        candidate_switch_frames = 1
+
+                    if candidate_switch_frames >= SWITCH_CONFIRM_FRAMES:
+                        # Confirmed sustained speaker change: commit camera pan
+                        last_known_x = best_cx
+                        candidate_switch_frames = 0
+                        trajectory.append((timestamp, float(last_known_x), True))
+                    else:
+                        # Hold on current speaker! Do not twitch camera
+                        trajectory.append((timestamp, float(last_known_x), False))
         else:
+            # Brief occlusion/miss: maintain speaker memory position
+            candidate_switch_frames = 0
             trajectory.append((timestamp, float(last_known_x), False))
 
         current_frame += sample_step
@@ -168,12 +249,13 @@ def generate_smoothed_camera_pan(
     video_h: int,
     fps: float,
     total_frames: int,
-    deadzone_ratio: float = 0.04,
-    smooth_factor: float = 0.65
+    deadzone_ratio: float = 0.08,
+    smooth_factor: float = 0.22,
+    max_pan_speed_px_per_sec: float = 480.0
 ) -> List[Tuple[float, int]]:
     """
     Computes cinematic gimbal camera panning positions (x coordinate) for every frame.
-    Applies deadzone to avoid fidgeting and exponential smoothing for organic movement.
+    Applies calibrated deadzone to avoid fidgeting, smooth easing, and max-velocity damping for organic movement.
     Guarantees crop x stays strictly within [0, video_w - crop_w].
     """
     crop_w = int(video_h * 9 / 16)
@@ -188,13 +270,23 @@ def generate_smoothed_camera_pan(
     first_face_x = trajectory[0][1]
     first_target = max(0.0, min(float(max_crop_x), first_face_x - crop_w / 2.0))
     cur_cam_x = first_target
+    prev_t = trajectory[0][0]
 
     smoothed_keyframes: List[Tuple[float, int]] = []
     for t, face_cx, det in trajectory:
         target_x = max(0.0, min(float(max_crop_x), face_cx - crop_w / 2.0))
         diff = target_x - cur_cam_x
+        dt = max(0.001, t - prev_t)
+        prev_t = t
+
         if abs(diff) > deadzone:
-            cur_cam_x += diff * smooth_factor
+            # Smooth easing with velocity limit to prevent whiplash
+            step = diff * smooth_factor
+            max_step = max_pan_speed_px_per_sec * dt
+            if abs(step) > max_step:
+                step = max_step if step > 0 else -max_step
+            cur_cam_x += step
+
         cur_cam_x = max(0.0, min(float(max_crop_x), cur_cam_x))
         smoothed_keyframes.append((t, int(round(cur_cam_x))))
 
@@ -336,6 +428,8 @@ def process_reframe(
     vignette: float = 0.0,
     duration_limit: Optional[float] = None,
     use_gpu: bool = True,
+    compress: bool = True,
+    crf: int = 22,
     progress_callback: Optional[Callable[[float, float, float, str], None]] = None
 ) -> str:
     """
@@ -406,17 +500,46 @@ def process_reframe(
         ffmpeg = get_ffmpeg_path()
         dur_args = ["-t", str(duration_limit)] if duration_limit else []
 
+        is_preview = bool(duration_limit)
+
         if use_gpu:
             codec, base_preset = detect_best_video_encoder()
             if codec == "h264_nvenc":
-                preset_args = ["-preset", "p1" if duration_limit else "p4", "-cq", "19", "-spatial-aq", "1"]
+                if is_preview:
+                    preset_args = ["-preset", "p1", "-cq", str(crf)]
+                else:
+                    preset_args = [
+                        "-preset", "p4", "-cq", str(crf), "-b:v", "0",
+                        "-maxrate", "12M", "-bufsize", "24M",
+                        "-spatial-aq", "1", "-profile:v", "high"
+                    ] if compress else ["-preset", "p4", "-cq", "19", "-spatial-aq", "1"]
             elif codec == "libx264":
-                preset_args = ["-preset", "ultrafast" if duration_limit else "fast", "-crf", "20"]
+                if is_preview:
+                    preset_args = ["-preset", "ultrafast", "-crf", str(crf)]
+                else:
+                    preset_args = [
+                        "-preset", "fast", "-crf", str(crf),
+                        "-maxrate", "12M", "-bufsize", "24M",
+                        "-profile:v", "high"
+                    ] if compress else ["-preset", "fast", "-crf", "20"]
             else:
                 preset_args = base_preset
         else:
             codec = "libx264"
-            preset_args = ["-preset", "ultrafast" if duration_limit else "fast", "-crf", "20"]
+            if is_preview:
+                preset_args = ["-preset", "ultrafast", "-crf", str(crf)]
+            else:
+                preset_args = [
+                    "-preset", "fast", "-crf", str(crf),
+                    "-maxrate", "12M", "-bufsize", "24M",
+                    "-profile:v", "high"
+                ] if compress else ["-preset", "fast", "-crf", "20"]
+
+        extra_opts = ["-pix_fmt", "yuv420p"]
+        if not is_preview and compress:
+            extra_opts += ["-movflags", "+faststart"]
+
+        audio_args = ["-c:a", "copy"] if is_preview else ["-c:a", "aac", "-b:a", "192k"]
 
         if is_complex:
             cmd = [
@@ -427,9 +550,9 @@ def process_reframe(
                 "-map", "[outv]",
                 "-map", "0:a?",
                 "-c:v", codec,
-            ] + preset_args + [
+            ] + preset_args + extra_opts + [
                 "-threads", "0",
-                "-c:a", "copy",
+            ] + audio_args + [
                 output_path
             ]
         else:
@@ -439,13 +562,13 @@ def process_reframe(
             ] + dur_args + [
                 "-vf", filter_str,
                 "-c:v", codec,
-            ] + preset_args + [
+            ] + preset_args + extra_opts + [
                 "-threads", "0",
-                "-c:a", "copy",
+            ] + audio_args + [
                 output_path
             ]
 
-        limit_desc = f" ({duration_limit}s preview)" if duration_limit else ""
+        limit_desc = f" ({duration_limit}s preview)" if duration_limit else (" [Compressed]" if compress else "")
         print(f"[*] Reframing 16:9 -> 9:16{limit_desc} (Mode: {mode}, via {codec})...")
 
         total_dur = duration_limit if duration_limit else vinfo.get("duration", 10.0)
@@ -465,6 +588,7 @@ def process_reframe(
                     manual_pan=manual_pan, sharpness=sharpness, contrast=contrast,
                     saturation=saturation, brightness=brightness, vignette=vignette,
                     duration_limit=duration_limit, use_gpu=False,
+                    compress=compress, crf=crf,
                     progress_callback=progress_callback
                 )
             else:

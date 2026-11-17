@@ -954,8 +954,16 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <form id="subForm">
                     <!-- 1. Files -->
                     <div class="card">
-                        <div class="card-title">
+                        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                             <div class="card-title-left" data-i18n="section1Title">📁 1. Video & Subtitles</div>
+                            <div id="cacheControlWrap" style="display:inline-flex; align-items:center; gap:8px; font-size:0.75rem;">
+                                <span id="cacheBadge" style="background:rgba(255,255,255,0.06); padding:4px 9px; border-radius:6px; color:var(--text-dim); border:1px solid var(--border); font-family:Consolas, monospace;">
+                                    💾 <span id="cacheInfoText">Cache: ...</span>
+                                </span>
+                                <button type="button" class="btn-pill" onclick="clearAppCache()" style="padding:4px 10px; font-size:0.74rem; border-radius:6px; cursor:pointer;" data-i18n="clearCacheBtn">
+                                    🗑️ Clear Cache
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Video Selection + Reframe button side-by-side -->
@@ -975,13 +983,13 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                         <div class="form-group" style="margin-top:16px;">
                             <label class="toggle-container">
-                                <input type="checkbox" id="autoTranscribe">
+                                <input type="checkbox" id="autoTranscribe" checked>
                                 <span data-i18n="transcribeCheckbox">🎙️ <b>Transcribe with Local Whisper</b> (large-v3-turbo on RTX GPU)</span>
                             </label>
                         </div>
 
                         <!-- SRT Selection -->
-                        <div class="form-group" id="srtGroup">
+                        <div class="form-group" id="srtGroup" style="display: none;">
                             <label data-i18n="srtLabel">Existing SRT Subtitles (e.g. Buzz Whisper):</label>
                             <input type="hidden" id="srtPath" value="">
                             <div class="file-control-row">
@@ -992,7 +1000,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                             </div>
                         </div>
 
-                        <div class="row" id="whisperGroup" style="display: none;">
+                        <div class="row" id="whisperGroup">
                             <div class="form-group">
                                 <label data-i18n="langLabel">Audio Language:</label>
                                 <select id="lang">
@@ -1185,6 +1193,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                         </div>
 
                         <div class="export-options-box">
+                            <label class="toggle-container" style="font-size: 0.85rem; font-weight: 500; cursor: pointer;">
+                                <input type="checkbox" id="compressVideo" checked>
+                                <span data-i18n="compressVideoLabel">📦 <b>Smart Video Compression</b> (TikTok / Web optimized, Faststart, AAC)</span>
+                            </label>
                             <label class="toggle-container" style="font-size: 0.85rem; font-weight: 500; cursor: pointer;">
                                 <input type="checkbox" id="exportSubFiles">
                                 <span data-i18n="exportSubFilesLabel">📄 Also export subtitle files (.srt & .ass)</span>
@@ -1507,7 +1519,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                 previewReframeDesc: "Fast GPU render with face tracking & color grading in ~0.5s.",
                 statusStart: "[*] Processing started locally...",
                 successMsg: "🎉 SUCCESS!",
-                errorMsg: "❌ ERROR:"
+                errorMsg: "❌ ERROR:",
+                openFolderBtn: "Open File Location",
+                clearCacheBtn: "🗑️ Clear Cache",
+                cacheClearedMsg: "Cache cleared successfully!",
+                compressVideoLabel: "📦 <b>Smart Video Compression</b> (TikTok / Web optimized, Faststart, AAC)"
             },
             fr: {
                 section1Title: "📁 1. Vidéo & Sous-titres",
@@ -1578,7 +1594,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                 previewReframeDesc: "Rendu GPU rapide avec détection faciale & retouches en ~0.5s.",
                 statusStart: "[*] Lancement du traitement local...",
                 successMsg: "🎉 SUCCÈS !",
-                errorMsg: "❌ ERREUR :"
+                errorMsg: "❌ ERREUR :",
+                openFolderBtn: "Ouvrir l'emplacement du fichier",
+                clearCacheBtn: "🗑️ Vider le cache",
+                cacheClearedMsg: "Cache vidé avec succès !",
+                compressVideoLabel: "📦 <b>Compression Vidéo Optimisée</b> (Optimisé TikTok / Web, Faststart, AAC)"
             }
         };
 
@@ -2011,6 +2031,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 animSpeed: parseInt(document.getElementById('animSpeed').value),
                 animScale: parseInt(document.getElementById('animScale').value),
                 allCaps: document.getElementById('allCaps').checked,
+                compress: document.getElementById('compressVideo') ? document.getElementById('compressVideo').checked : true,
                 exportSubFiles: document.getElementById('exportSubFiles').checked,
                 keepRawReframed: document.getElementById('keepRawReframed') ? document.getElementById('keepRawReframed').checked : false,
                 wasReframed: !!window._wasReframedInSession
@@ -2025,7 +2046,19 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const data = await res.json();
                 if (data.success) {
                     prog.complete(currentLang === 'fr' ? '🎉 Rendu vidéo terminé avec succès !' : '🎉 Render completed successfully!');
-                    statusBox.innerText = I18N[currentLang].successMsg + "\\n\\n" + data.logs;
+                    statusBox.innerHTML = `
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); flex-wrap:wrap; gap:8px;">
+    <span style="font-weight:700; color:#4ade80;">${I18N[currentLang].successMsg}</span>
+    <button type="button" class="btn-pill" onclick="openFileInExplorer('${(data.outputPath || '').replace(/\\\\/g, '\\\\\\\\')}')" style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; font-size:0.82rem; font-weight:700; background:rgba(0,242,254,0.15); border:1px solid var(--accent); color:#fff; border-radius:8px; cursor:pointer;">
+        📁 ${I18N[currentLang].openFolderBtn}
+    </button>
+</div>
+<div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:10px; word-break:break-all;">
+    <b>${currentLang === 'fr' ? 'Fichier exporté :' : 'Exported file:'}</b> <code>${data.outputPath || ''}</code>
+</div>
+<pre style="margin:0; font-family:inherit; white-space:pre-wrap; max-height:220px; overflow-y:auto; color:var(--text-muted);">${data.logs || ''}</pre>
+`;
+                    refreshCacheInfo();
                 } else {
                     prog.error(data.error || "Failed");
                     statusBox.innerText = I18N[currentLang].errorMsg + "\\n\\n" + (data.error || "An error occurred.");
@@ -2369,8 +2402,18 @@ HTML_CONTENT = """<!DOCTYPE html>
                     const box = document.getElementById('reframeStatusBox');
                     if (box) {
                         box.style.display = 'block';
-                        box.innerHTML = `<span style="color:#4ade80;">✔</span> <b>${I18N[currentLang].reframeExportSuccess}</b><br><code style="word-break:break-all;">${data.outputPath}</code>`;
+                        box.innerHTML = `
+<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+    <div>
+        <span style="color:#4ade80;">✔</span> <b>${I18N[currentLang].reframeExportSuccess}</b><br>
+        <code style="word-break:break-all; font-size:0.85rem; color:var(--text-dim);">${data.outputPath}</code>
+    </div>
+    <button type="button" class="btn-pill" onclick="openFileInExplorer('${data.outputPath.replace(/\\\\/g, '\\\\\\\\')}')" style="flex-shrink:0; display:inline-flex; align-items:center; gap:6px; padding:8px 14px; font-size:0.82rem; font-weight:700; background:rgba(168,85,247,0.25); border:1px solid var(--reframe-accent); color:#fff; border-radius:8px; cursor:pointer;">
+        📁 ${I18N[currentLang].openFolderBtn}
+    </button>
+</div>`;
                     }
+                    refreshCacheInfo();
                 } else {
                     prog.error(data.error || "Reframe failed");
                     alert("Error: " + (data.error || "Reframe failed"));
@@ -2383,10 +2426,66 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
-        // Init language and controls
+        async function openFileInExplorer(filePath) {
+            if (!filePath) return;
+            try {
+                const resp = await fetch('/api/open_folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: filePath })
+                });
+                const res = await resp.json();
+                if (!res.success) {
+                    console.warn("Could not open file explorer:", res);
+                }
+            } catch (err) {
+                console.error("openFileInExplorer error:", err);
+            }
+        }
+
+        async function refreshCacheInfo() {
+            try {
+                const resp = await fetch('/api/cache_info');
+                const data = await resp.json();
+                const badgeText = document.getElementById('cacheInfoText');
+                if (badgeText) {
+                    const count = (data.count || 0) + (data.temp_count || 0);
+                    const size = data.size_mb || 0;
+                    if (count === 0 && size === 0) {
+                        badgeText.innerText = currentLang === 'fr' ? 'Cache : 0 Mo' : 'Cache: 0 MB';
+                    } else {
+                        badgeText.innerText = `Cache: ${size} MB (${count} ${currentLang === 'fr' ? 'fichiers' : 'files'})`;
+                    }
+                }
+            } catch (err) {
+                console.error("refreshCacheInfo error:", err);
+            }
+        }
+
+        async function clearAppCache() {
+            const confirmMsg = currentLang === 'fr'
+                ? "Voulez-vous vraiment vider le cache de transcription Whisper et les aperçus temporaires ?"
+                : "Are you sure you want to clear Whisper transcription cache and temporary files?";
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                const resp = await fetch('/api/clear_cache', { method: 'POST' });
+                const data = await resp.json();
+                await refreshCacheInfo();
+                const msg = currentLang === 'fr'
+                    ? `Cache vidé (${data.deleted || 0} fichiers supprimés).`
+                    : `Cache cleared (${data.deleted || 0} files deleted).`;
+                alert(msg);
+            } catch (err) {
+                alert("Error clearing cache: " + err.message);
+            }
+        }
+
+        // Init language, controls and cache
         setLanguage(currentLang);
         applyPresetToControls();
         updateReframePreview();
+        refreshCacheInfo();
     </script>
 </body>
 </html>
@@ -2411,6 +2510,63 @@ def native_file_picker(file_type="video") -> str:
     selected = filedialog.askopenfilename(title=title, filetypes=ft)
     root.destroy()
     return selected or ""
+
+
+def open_in_file_explorer(target_path: str) -> bool:
+    """Opens the operating system file explorer highlighting or selecting the target file."""
+    import platform
+    import subprocess
+
+    if not target_path:
+        return False
+
+    abs_path = os.path.abspath(target_path)
+    if not os.path.exists(abs_path):
+        parent_dir = os.path.dirname(abs_path)
+        if os.path.exists(parent_dir):
+            abs_path = parent_dir
+        else:
+            return False
+
+    system = platform.system()
+    try:
+        if system == "Windows":
+            norm = os.path.normpath(abs_path)
+            if os.path.isfile(norm):
+                subprocess.Popen(f'explorer.exe /select,"{norm}"')
+            else:
+                subprocess.Popen(f'explorer.exe "{norm}"')
+            return True
+        elif system == "Darwin":
+            subprocess.Popen(["open", "-R", abs_path])
+            return True
+        else:
+            subprocess.Popen(["xdg-open", os.path.dirname(abs_path) if os.path.isfile(abs_path) else abs_path])
+            return True
+    except Exception as e:
+        print(f"[!] Error opening file explorer: {e}")
+        return False
+
+
+def cleanup_stale_temp_files():
+    """Removes orphan preview video and subtitle temp files from previous sessions."""
+    td = tempfile.gettempdir()
+    cleaned = 0
+    try:
+        for f in os.listdir(td):
+            if f.startswith("submaxxing_"):
+                fp = os.path.join(td, f)
+                try:
+                    age_s = time.time() - os.path.getmtime(fp)
+                    if f.endswith(".ass") or age_s > 3600:
+                        os.remove(fp)
+                        cleaned += 1
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    if cleaned > 0:
+        print(f"[i] Cleaned up {cleaned} stale temporary preview files.")
 
 
 def build_style_from_payload(data: dict) -> SubStylePreset:
@@ -2523,11 +2679,11 @@ class SubHandler(BaseHTTPRequestHandler):
                 cached_data = load_cached_timings(vpath, "fr", "large-v3-turbo") or load_cached_timings(vpath, None, "large-v3-turbo")
                 if cached_data:
                     cached = True
-                else:
-                    base_name = os.path.splitext(vpath)[0]
-                    if os.path.exists(f"{base_name}_transcribed.srt"):
-                        cached = True
             self._send_json({"cached": cached})
+            return
+        elif parsed.path == "/api/cache_info":
+            from transcriber import get_cache_info
+            self._send_json(get_cache_info())
             return
         else:
             self.send_response(404)
@@ -2541,6 +2697,28 @@ class SubHandler(BaseHTTPRequestHandler):
             ftype = query.get("type", ["video"])[0]
             selected_path = native_file_picker(ftype)
             self._send_json({"path": selected_path})
+            return
+
+        elif parsed.path == "/api/cache_info":
+            from transcriber import get_cache_info
+            self._send_json(get_cache_info())
+            return
+
+        elif parsed.path == "/api/clear_cache":
+            from transcriber import clear_submaxxing_cache
+            from reframe import clear_reframe_cache
+            deleted = clear_submaxxing_cache()
+            clear_reframe_cache()
+            self._send_json({"success": True, "deleted": deleted})
+            return
+
+        elif parsed.path == "/api/open_folder":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
+            data = json.loads(body)
+            target_path = data.get("path", "").strip(' "')
+            ok = open_in_file_explorer(target_path)
+            self._send_json({"success": ok, "path": target_path})
             return
 
         elif parsed.path == "/api/preview_video":
@@ -2593,19 +2771,14 @@ class SubHandler(BaseHTTPRequestHandler):
                         use_cache=True
                     )
                 else:
-                    base_name = os.path.splitext(video_path)[0]
-                    existing_srt = f"{base_name}_transcribed.srt"
-                    if os.path.exists(existing_srt):
-                        chunks = srt_to_chunks(existing_srt, max_words=words_per_chunk, is_file=True)
-                    else:
-                        # Fast 3-second preview: transcribe only audio snippet in ~0.2s
-                        chunks, _ = transcribe_video(
-                            media_path=video_path,
-                            model_name=model_name,
-                            language=actual_lang,
-                            max_words=words_per_chunk,
-                            duration_limit=3.0
-                        )
+                    # Fast 3-second preview: transcribe audio snippet in ~0.2s with true Whisper word timestamps
+                    chunks, _ = transcribe_video(
+                        media_path=video_path,
+                        model_name=model_name,
+                        language=actual_lang,
+                        max_words=words_per_chunk,
+                        duration_limit=3.0
+                    )
             else:
                 chunks = srt_to_chunks(srt_path, max_words=words_per_chunk, is_file=True)
 
@@ -2674,6 +2847,7 @@ class SubHandler(BaseHTTPRequestHandler):
                         cur_sec=cur_s, total_sec=tot_s, speed=spd
                     )
 
+            compress = data.get("compress", True)
             process_reframe(
                 video_path=video_path,
                 output_path=output_path,
@@ -2686,6 +2860,7 @@ class SubHandler(BaseHTTPRequestHandler):
                 vignette=vignette,
                 duration_limit=dur_limit,
                 use_gpu=True,
+                compress=compress,
                 progress_callback=cb
             )
 
@@ -2712,6 +2887,7 @@ class SubHandler(BaseHTTPRequestHandler):
         render_type = data.get("renderType", "burn")
         model_name = data.get("model", "large-v3-turbo")
         lang = data.get("lang", "fr")
+        compress = data.get("compress", True)
         export_sub_files = data.get("exportSubFiles", False)
         keep_raw_reframed = data.get("keepRawReframed", False)
         was_reframed = data.get("wasReframed", False)
@@ -2841,12 +3017,13 @@ class SubHandler(BaseHTTPRequestHandler):
                 log(f"[+] WebM overlay ready: '{webm_out}'")
 
             if render_type in ["burn", "both"]:
-                log(f"[*] GPU NVENC accelerated rendering...")
+                log(f"[*] GPU NVENC accelerated rendering{' (with smart web compression)' if compress else ''}...")
                 render_subtitles_to_video(
                     video_path=video_path,
                     ass_path=ass_path,
                     output_path=final_mp4,
                     use_gpu=True,
+                    compress=compress,
                     progress_callback=render_cb
                 )
                 log(f"[+] Final video rendered: '{final_mp4}'")
@@ -2917,6 +3094,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 def run_server():
+    cleanup_stale_temp_files()
     server = None
     try:
         server = ThreadedHTTPServer(("127.0.0.1", PORT), SubHandler)

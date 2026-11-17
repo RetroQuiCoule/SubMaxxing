@@ -230,12 +230,15 @@ def render_subtitles_to_video(
     ass_path: str,
     output_path: str,
     use_gpu: bool = True,
+    compress: bool = True,
+    crf: int = 22,
     duration_limit: Optional[float] = None,
     progress_callback: Optional[Callable[[float, float, float, str], None]] = None
 ) -> str:
     """
     Burns ASS subtitles into video_path, outputting to output_path.
     Uses NVIDIA NVENC GPU acceleration when available, with ultra-fast presets for previews.
+    Applies smart TikTok/Web video compression by default (CRF/CQ 22, Faststart, AAC 192k, YUV420P).
     Tracks real encoding progress via progress_callback.
     """
     ffmpeg = get_ffmpeg_path()
@@ -243,20 +246,56 @@ def render_subtitles_to_video(
     vf_arg = f"ass='{escaped_ass}'"
 
     dur_args = ["-t", str(duration_limit)] if duration_limit else []
+    is_preview = bool(duration_limit)
 
     if use_gpu:
         codec, base_preset = detect_best_video_encoder()
         if codec == "h264_nvenc":
-            # For 3-second previews: use p1 (fastest possible NVENC, renders in ~0.15s)
-            # For full exports: use p4 (high quality with fast throughput)
-            preset_args = ["-preset", "p1" if duration_limit else "p4", "-cq", "19", "-spatial-aq", "1"]
+            if is_preview:
+                preset_args = ["-preset", "p1", "-cq", str(crf)]
+            else:
+                preset_args = [
+                    "-preset", "p4",
+                    "-cq", str(crf),
+                    "-b:v", "0",
+                    "-maxrate", "12M",
+                    "-bufsize", "24M",
+                    "-spatial-aq", "1",
+                    "-profile:v", "high"
+                ] if compress else ["-preset", "p4", "-cq", "19", "-spatial-aq", "1"]
         elif codec == "libx264":
-            preset_args = ["-preset", "ultrafast" if duration_limit else "fast", "-crf", "20"]
+            if is_preview:
+                preset_args = ["-preset", "ultrafast", "-crf", str(crf)]
+            else:
+                preset_args = [
+                    "-preset", "fast",
+                    "-crf", str(crf),
+                    "-maxrate", "12M",
+                    "-bufsize", "24M",
+                    "-profile:v", "high"
+                ] if compress else ["-preset", "fast", "-crf", "20"]
         else:
             preset_args = base_preset
     else:
         codec = "libx264"
-        preset_args = ["-preset", "ultrafast" if duration_limit else "fast", "-crf", "20"]
+        if is_preview:
+            preset_args = ["-preset", "ultrafast", "-crf", str(crf)]
+        else:
+            preset_args = [
+                "-preset", "fast",
+                "-crf", str(crf),
+                "-maxrate", "12M",
+                "-bufsize", "24M",
+                "-profile:v", "high"
+            ] if compress else ["-preset", "fast", "-crf", "20"]
+
+    # Extra optimization args for web & social platforms (TikTok, Reels, Shorts)
+    extra_opts = ["-pix_fmt", "yuv420p"]
+    if not is_preview and compress:
+        extra_opts += ["-movflags", "+faststart"]
+
+    # Audio handling: AAC 192k for clean compression; copy for quick preview
+    audio_args = ["-c:a", "copy"] if is_preview else ["-c:a", "aac", "-b:a", "192k"]
 
     cmd = [
         ffmpeg, "-y",
@@ -264,13 +303,13 @@ def render_subtitles_to_video(
     ] + dur_args + [
         "-vf", vf_arg,
         "-c:v", codec,
-    ] + preset_args + [
+    ] + preset_args + extra_opts + [
         "-threads", "0",
-        "-c:a", "copy",
+    ] + audio_args + [
         output_path
     ]
 
-    limit_desc = f" ({duration_limit}s preview, preset {preset_args[1]})" if duration_limit else ""
+    limit_desc = f" ({duration_limit}s preview, preset {preset_args[1]})" if duration_limit else (" [Compressed]" if compress else "")
     print(f"[*] Rendering subtitled video{limit_desc} via {codec} to '{output_path}'...")
 
     vinfo = get_video_info(video_path)
@@ -291,6 +330,8 @@ def render_subtitles_to_video(
                 ass_path=ass_path,
                 output_path=output_path,
                 use_gpu=False,
+                compress=compress,
+                crf=crf,
                 duration_limit=duration_limit,
                 progress_callback=progress_callback
             )
@@ -298,6 +339,51 @@ def render_subtitles_to_video(
             raise
 
     print(f"[+] Render complete: '{output_path}'")
+    return output_path
+
+
+def compress_video(
+    video_path: str,
+    output_path: Optional[str] = None,
+    crf: int = 22,
+    max_bitrate: str = "12M",
+    use_gpu: bool = True,
+    progress_callback: Optional[Callable[[float, float, float, str], None]] = None
+) -> str:
+    """
+    Compresses any input video into a web-optimized MP4 (H.264 high profile, Faststart, AAC audio).
+    """
+    if not output_path:
+        base, ext = os.path.splitext(video_path)
+        output_path = f"{base}_compressed.mp4"
+
+    ffmpeg = get_ffmpeg_path()
+    vinfo = get_video_info(video_path)
+    total_dur = vinfo.get("duration", 10.0)
+
+    if use_gpu:
+        codec, _ = detect_best_video_encoder()
+        if codec == "h264_nvenc":
+            enc_args = ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", str(crf), "-b:v", "0", "-maxrate", max_bitrate, "-bufsize", "24M", "-spatial-aq", "1", "-profile:v", "high"]
+        else:
+            enc_args = ["-c:v", "libx264", "-preset", "fast", "-crf", str(crf), "-maxrate", max_bitrate, "-bufsize", "24M", "-profile:v", "high"]
+    else:
+        enc_args = ["-c:v", "libx264", "-preset", "fast", "-crf", str(crf), "-maxrate", max_bitrate, "-bufsize", "24M", "-profile:v", "high"]
+
+    cmd = [
+        ffmpeg, "-y",
+        "-i", video_path,
+    ] + enc_args + [
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-threads", "0",
+        output_path
+    ]
+
+    print(f"[*] Compressing video to '{output_path}'...")
+    run_ffmpeg_with_progress(cmd, duration=total_dur, progress_callback=progress_callback, desc="Compressing")
     return output_path
 
 
