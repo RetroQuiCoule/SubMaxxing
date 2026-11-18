@@ -672,6 +672,40 @@ HTML_CONTENT = """<!DOCTYPE html>
             color: #a78bfa;
         }
 
+        /* AutoCut 16:9 Landscape Video Player */
+        .autocut-player-wrapper {
+            width: 100%;
+            max-width: 620px;
+            aspect-ratio: 16 / 9;
+            margin: 0 auto 16px auto;
+            background: #000;
+            border: 2px solid var(--border);
+            border-radius: 14px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5), var(--neu-shadow);
+        }
+        .autocut-video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+            display: none;
+        }
+        .autocut-placeholder {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            text-align: center;
+            background: radial-gradient(circle at center, rgba(0, 242, 254, 0.08) 0%, rgba(10, 15, 26, 0.96) 80%);
+            z-index: 2;
+        }
+
         /* Animated Progress Bars */
         .progress-wrap {
             margin-top: 14px;
@@ -1597,7 +1631,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     </div>
 
                     <div class="phone-wrapper" id="reframePhoneWrapper">
-                        <video id="reframePlayer" class="reframe-phone-video" controls autoplay loop playsinline></video>
+                        <video id="reframePlayer" class="reframe-phone-video" controls playsinline></video>
                         <div id="reframeVignetteOverlay" class="reframe-vignette-overlay"></div>
                         <div id="reframePlaceholder" class="reframe-placeholder">
                             <div class="reframe-ph-icon" style="font-size:2.5rem; opacity:0.6;">▶</div>
@@ -1770,12 +1804,12 @@ HTML_CONTENT = """<!DOCTYPE html>
                     <div class="card-title">
                         <div class="card-title-left">Lecteur & Prévisualisation</div>
                     </div>
-                    <div class="phone-wrapper">
-                        <video id="smartCutPlayer" class="reframe-phone-video" controls playsinline></video>
-                        <div id="smartCutPlaceholder" class="reframe-placeholder">
-                            <div class="reframe-ph-icon" style="font-size:2.5rem; opacity:0.6;">▶</div>
-                            <div class="reframe-ph-title">Lecteur Prêt</div>
-                            <div class="reframe-ph-desc">Sélectionnez une vidéo pour analyser les thèmes et les coupes.</div>
+                    <div class="autocut-player-wrapper">
+                        <video id="smartCutPlayer" class="autocut-video" controls playsinline></video>
+                        <div id="smartCutPlaceholder" class="autocut-placeholder">
+                            <div style="font-size:2.4rem; opacity:0.6; margin-bottom:8px;">▶</div>
+                            <div style="font-weight:700; font-size:1.05rem; margin-bottom:4px; color:#fff;">Lecteur Vidéo 16:9 Prêt</div>
+                            <div style="font-size:0.82rem; color:var(--text-dim);">Sélectionnez une vidéo pour analyser les moments clés et jumpcuts.</div>
                         </div>
                     </div>
 
@@ -2031,7 +2065,6 @@ HTML_CONTENT = """<!DOCTYPE html>
                 rfPlayer.style.display = 'block';
                 rfPlayer.src = `/api/stream_video?path=${encodeURIComponent(clean)}`;
                 try { rfPlayer.load(); } catch (e) {}
-                rfPlayer.play().catch(() => {});
             }
 
             checkVideoCache(clean);
@@ -2108,8 +2141,18 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
         }
 
+        function pauseAllPlayers() {
+            ['smartCutPlayer', 'reframePlayer', 'previewPlayer'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && typeof el.pause === 'function') {
+                    try { el.pause(); } catch (e) {}
+                }
+            });
+        }
+
         // View Switcher (Subtitles <-> SmartCut <-> Reframe)
         function switchView(viewName) {
+            pauseAllPlayers();
             document.getElementById('viewSubtitles').className = 'view-section' + (viewName === 'subtitles' ? ' active' : '');
             const vSmartCut = document.getElementById('viewSmartCut');
             if (vSmartCut) vSmartCut.className = 'view-section' + (viewName === 'smartcut' ? ' active' : '');
@@ -2197,7 +2240,6 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const player = document.getElementById('smartCutPlayer');
                 if (player) {
                     player.currentTime = smartCutData.selectedTopic.start;
-                    player.play().catch(() => {});
                 }
             }
         }
@@ -2237,10 +2279,10 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const isSel = smartCutData.selectedTopic && smartCutData.selectedTopic.id === t.id;
                 html += `
                     <div class="topic-item ${isSel ? 'selected' : ''}" onclick="selectTopic(${t.id})">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:6px;">
                             <b style="font-size:0.9rem; color:#fff;">${t.title}</b>
                             <div style="display:flex; gap:6px; align-items:center;">
-                                <span class="badge-score">Score: ${t.virality_score}/10</span>
+                                <span class="badge-score" style="background:rgba(0,242,254,0.18); color:var(--accent); font-weight:700;">Top #${t.id} • ${t.virality_score}/10</span>
                                 <span style="font-size:0.75rem; color:var(--text-dim);">${t.start.toFixed(1)}s - ${t.end.toFixed(1)}s (${t.duration.toFixed(0)}s)</span>
                             </div>
                         </div>
@@ -3749,15 +3791,21 @@ class SubHandler(BaseHTTPRequestHandler):
             final_output = cut_output
 
             if burn_subs:
-                words, _ = transcribe_to_words(video_path, use_cache=True)
-                shifted_words = shift_word_timings_for_cuts(words, cuts)
-                if shifted_words:
-                    chunks = group_words_into_chunks(shifted_words, max_words=2)
+                # Transcribe the already-cut video directly:
+                # Guarantees frame-perfect alignment without audio drift or subtitle overlap
+                words, _ = transcribe_to_words(
+                    cut_output,
+                    model_name="large-v3-turbo",
+                    language=None,
+                    use_cache=False
+                )
+                if words:
+                    chunks = group_words_into_chunks(words, max_words=2)
                     preset = PRESETS.get(preset_name, PRESETS["hormozi"])
 
                     cut_info = get_video_info(cut_output)
-                    res_w = cut_info.get("width", 1080)
-                    res_h = cut_info.get("height", 1920)
+                    res_w = cut_info.get("width", 1920)
+                    res_h = cut_info.get("height", 1080)
 
                     ass_path = os.path.splitext(cut_output)[0] + ".ass"
                     ass_content = chunks_to_ass(chunks, preset, play_res_x=res_w, play_res_y=res_h)

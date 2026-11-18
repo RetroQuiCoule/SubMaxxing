@@ -158,97 +158,202 @@ def _extract_title_from_text(text: str, default_idx: int) -> str:
     return f"Moment clé #{default_idx}"
 
 
+def _score_sentence_editorial(sentence: Dict[str, Any]) -> int:
+    """Computes an editorial virality score for a sentence."""
+    txt = sentence["text"]
+    lower = txt.lower()
+    score = 0
+
+    # 1. Questions or strong topic shifts
+    if "?" in txt or lower.startswith(("pourquoi", "comment", "est-ce", "qu'est-ce", "qui", "quand")):
+        score += 5
+    if "!" in txt:
+        score += 3
+
+    shift_regex = re.compile("|".join(TOPIC_SHIFT_MARKERS_FR + TOPIC_SHIFT_MARKERS_EN), re.IGNORECASE)
+    if bool(shift_regex.search(txt[:50])):
+        score += 4
+
+    # 2. Viral keywords
+    viral_words = VIRAL_KEYWORDS_FR | VIRAL_KEYWORDS_EN
+    tokens = set(re.findall(r"\w+", lower))
+    matches = tokens & viral_words
+    score += len(matches) * 3
+
+    # 3. Capitalized named entities (people, countries, organizations)
+    cap_words = [
+        w for w in txt.split()
+        if w and w[0].isupper() and w.lower() not in {
+            "le", "la", "les", "ce", "cette", "un", "une", "c'est", "il", "elle", "on", "nous", "vous", "je", "tu"
+        }
+    ]
+    score += min(5, len(cap_words) * 2)
+
+    # 4. Penalty for repetitive filler words
+    filler_tokens = {"bonjour", "voila", "oui", "d'accord", "merci", "euh", "hein"}
+    filler_count = sum(1 for t in tokens if t in filler_tokens)
+    if filler_count >= 2:
+        score -= 4
+
+    return score
+
+
 def segment_topics_heuristic(
     word_timings: List[WordTiming],
     video_duration: float,
     min_block_sec: float = 25.0,
-    max_block_sec: float = 90.0
+    max_block_sec: float = 75.0,
+    max_highlights: int = 5
 ) -> List[ThematicBlock]:
     """
-    Deterministic rule-based thematic boundary detector.
-    Groups sentences into self-contained 25s - 90s blocks, finds the best hook,
-    and calculates virality metrics. Runs in ~5ms with zero external dependencies.
+    Intelligent Viral Highlight Detector (Opus Clip / Klap style).
+    Extracts the 3 to 5 most punchy, pertinent moments (the gems)
+    rather than dumb sequential end-to-end slicing.
+    Boring moments and transition chatter between highlights are cleanly excluded.
     """
     sentences = _group_words_into_sentences(word_timings)
     if not sentences:
         return []
 
-    shift_regex = re.compile("|".join(TOPIC_SHIFT_MARKERS_FR + TOPIC_SHIFT_MARKERS_EN), re.IGNORECASE)
+    if video_duration <= 75.0 or len(sentences) <= 3:
+        # Video is short enough to be a single standalone clip
+        full_text = " ".join(s["text"] for s in sentences)
+        hook = sentences[0]["text"]
+        return [ThematicBlock(
+            id=1,
+            title=_extract_title_from_text(hook, 1),
+            hook=hook,
+            summary=full_text[:160] + ("..." if len(full_text) > 160 else ""),
+            start=round(sentences[0]["start"], 2),
+            end=round(sentences[-1]["end"], 2),
+            duration=round(sentences[-1]["end"] - sentences[0]["start"], 2),
+            virality_score=8,
+            key_phrases=[s["text"] for s in sentences[:2]],
+            selected=True
+        )]
 
-    raw_blocks: List[List[Dict[str, Any]]] = []
-    current_block: List[Dict[str, Any]] = []
-
+    # 1. Score each sentence for editorial punch
+    scored_sentences = []
     for s in sentences:
-        if not current_block:
-            current_block.append(s)
+        ed_score = _score_sentence_editorial(s)
+        scored_sentences.append({
+            **s,
+            "ed_score": ed_score
+        })
+
+    num_s = len(scored_sentences)
+    candidates = []
+
+    # 2. Window search for high-density highlights starting on strong hooks
+    for i in range(num_s):
+        s_start = scored_sentences[i]
+        # Only start on sentences with real editorial impact
+        if s_start["ed_score"] < 3:
             continue
 
-        block_start = current_block[0]["start"]
-        current_dur = s["end"] - block_start
+        start_time = s_start["start"]
+        accum_words = 0
+        window_sents = []
 
-        # Check for topic break triggers
-        is_topic_shift = bool(shift_regex.search(s["text"][:40]))
-        has_big_pause = (s["start"] - current_block[-1]["end"]) > 1.2
+        for j in range(i, num_s):
+            s_curr = scored_sentences[j]
+            window_sents.append(s_curr)
+            accum_words += s_curr["word_count"]
+            cur_dur = s_curr["end"] - start_time
 
-        if (current_dur >= min_block_sec and (is_topic_shift or has_big_pause)) or current_dur >= max_block_sec:
-            raw_blocks.append(current_block)
-            current_block = [s]
-        else:
-            current_block.append(s)
+            if cur_dur > max_block_sec:
+                break
 
-    if current_block:
-        # If last block is too short (< 15s) and we already have blocks, merge it with previous
-        if raw_blocks and (current_block[-1]["end"] - current_block[0]["start"]) < 15.0:
-            raw_blocks[-1].extend(current_block)
-        else:
-            raw_blocks.append(current_block)
+            if cur_dur >= min_block_sec:
+                # Clean boundary check
+                ends_clean = any(s_curr["text"].rstrip().endswith(p) for p in ('.', '!', '?', '…', ':'))
+                has_next_pause = (j < num_s - 1 and (scored_sentences[j + 1]["start"] - s_curr["end"]) >= 0.5)
 
+                if ends_clean or has_next_pause or cur_dur >= (max_block_sec - 8):
+                    avg_density = sum(s["ed_score"] for s in window_sents) / len(window_sents)
+                    hook_bonus = s_start["ed_score"] * 1.5
+
+                    # Word rate bonus (lively speech)
+                    wpm = (accum_words / max(cur_dur, 1.0)) * 60.0
+                    wpm_bonus = min(2.5, max(0.0, (wpm - 100) / 30.0))
+
+                    # Duration sweet spot (35s to 65s)
+                    dur_fit = 2.0 if 35.0 <= cur_dur <= 65.0 else 0.5
+
+                    total_score = hook_bonus + (avg_density * 2.0) + wpm_bonus + dur_fit
+                    candidates.append({
+                        "start": start_time,
+                        "end": s_curr["end"],
+                        "duration": cur_dur,
+                        "score": total_score,
+                        "hook": s_start["text"],
+                        "full_text": " ".join(s["text"] for s in window_sents),
+                        "sentences": window_sents
+                    })
+
+    # Fallback if no candidate meets strict threshold
+    if not candidates:
+        for i in range(0, num_s, max(1, num_s // 4)):
+            start_time = scored_sentences[i]["start"]
+            for j in range(i, num_s):
+                cur_dur = scored_sentences[j]["end"] - start_time
+                if min_block_sec <= cur_dur <= max_block_sec:
+                    w_s = scored_sentences[i:j+1]
+                    candidates.append({
+                        "start": start_time,
+                        "end": scored_sentences[j]["end"],
+                        "duration": cur_dur,
+                        "score": 5.0,
+                        "hook": scored_sentences[i]["text"],
+                        "full_text": " ".join(s["text"] for s in w_s),
+                        "sentences": w_s
+                    })
+                    break
+
+    # 3. Non-Maximum Suppression (NMS) to select top distinct highlights
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+    selected_candidates = []
+
+    for cand in candidates:
+        overlap = False
+        for sel in selected_candidates:
+            ov_start = max(cand["start"], sel["start"])
+            ov_end = min(cand["end"], sel["end"])
+            if ov_end > ov_start:
+                ov_dur = ov_end - ov_start
+                # Exclude if overlap is more than 8 seconds or 15%
+                if ov_dur > 8.0 or (ov_dur / min(cand["duration"], sel["duration"])) > 0.15:
+                    overlap = True
+                    break
+        if not overlap:
+            selected_candidates.append(cand)
+            if len(selected_candidates) >= max_highlights:
+                break
+
+    # 4. Build ThematicBlocks ranked by virality
     blocks: List[ThematicBlock] = []
+    for rank, c in enumerate(selected_candidates, start=1):
+        raw_v = int(round(c["score"] * 0.35))
+        virality_score = min(10, max(6, raw_v))
+        if rank == 1 and virality_score < 9:
+            virality_score = 9
+        elif rank == 2 and virality_score < 8:
+            virality_score = 8
 
-    for idx, blk in enumerate(raw_blocks, start=1):
-        b_start = blk[0]["start"]
-        b_end = blk[-1]["end"]
-        b_dur = b_end - b_start
-        full_text = " ".join(s["text"] for s in blk)
-
-        # Find best hook sentence inside block
-        best_hook_sent = blk[0]["text"]
-        highest_hook_score = 1
-
-        for s in blk[:3]:  # Check first 3 sentences
-            h_score = _score_sentence_as_hook(s["text"], s["end"] - s["start"])
-            if h_score > highest_hook_score:
-                highest_hook_score = h_score
-                best_hook_sent = s["text"]
-
-        # Compute block virality score
-        # Factors: hook score, word density, presence of questions, viral keywords
-        total_words = sum(s["word_count"] for s in blk)
-        wpm = (total_words / max(b_dur, 1.0)) * 60.0
-        pacing_bonus = 2 if wpm > 130 else 1
-
-        tokens = set(re.findall(r"\w+", full_text.lower()))
-        viral_count = len(tokens & (VIRAL_KEYWORDS_FR | VIRAL_KEYWORDS_EN))
-        viral_bonus = min(3, viral_count)
-
-        raw_virality = int(round((highest_hook_score * 0.5) + pacing_bonus + viral_bonus))
-        virality_score = min(10, max(1, raw_virality))
-
-        # Extract title and summary
-        title = _extract_title_from_text(best_hook_sent, idx)
-        summary = full_text[:160] + ("..." if len(full_text) > 160 else "")
+        title = _extract_title_from_text(c["hook"], rank)
+        summary = c["full_text"][:160] + ("..." if len(c["full_text"]) > 160 else "")
 
         blocks.append(ThematicBlock(
-            id=idx,
+            id=rank,
             title=title,
-            hook=best_hook_sent,
+            hook=c["hook"],
             summary=summary,
-            start=b_start,
-            end=b_end,
-            duration=b_dur,
+            start=round(c["start"], 2),
+            end=round(c["end"], 2),
+            duration=round(c["duration"], 2),
             virality_score=virality_score,
-            key_phrases=[s["text"] for s in blk[:2]],
-            selected=(idx == 1)  # Default select first block
+            key_phrases=[s["text"] for s in c["sentences"][:2]],
+            selected=(rank == 1)
         ))
 
     return blocks
@@ -276,20 +381,25 @@ def segment_topics_llm(
         lines.append(f"[{s['start']:.1f}s - {s['end']:.1f}s]: {s['text']}")
     compact_transcript = "\n".join(lines)
 
-    prompt = f"""Tu es un monteur vidéo expert pour TikTok, Reels et Shorts.
-Analyse la transcription horodatée ci-dessous d'une interview/discussion et découpe-la en blocs thématiques pertinents (durée idéale par extrait : entre 30s et 90s).
+    prompt = f"""Tu es un monteur vidéo d'élite spécialisé dans les formats courts ultra-viraux (TikTok, Reels, Shorts).
+Voici la transcription horodatée d'une émission / interview :
 
-Pour chaque bloc, fournis un objet JSON valide avec :
-- "title": Un titre accrocheur de 3 à 6 mots.
-- "hook": La phrase d'accroche la plus percutante au début du bloc.
-- "summary": Résumé en 1 phrase du sujet abordé.
-- "start": Timestamp début exact (en secondes, float).
-- "end": Timestamp fin exact (en secondes, float).
-- "virality_score": Note d'intérêt de 1 à 10 pour un Short/Reel.
+OBJECTIF :
+Extraire UNIQUEMENT les 3 à 5 MEILLEURS extraits viraux (les pépites / moments forts).
 
-Réponds UNIQUEMENT avec un tableau JSON d'objets, sans texte avant ni après. Exemple :
+DIRECTIVES STRICTES :
+1. NE DÉCOUPE PAS toute la vidéo chronologiquement bout à bout ! Ne fais AUCUN découpage continu !
+2. Ignore complètement les moments mous, transitions banales, présentations et bavardages sans enjeu.
+3. Chaque extrait retenu doit être une pépite autonome (débat tendu, révélation choc, punchline, question cruciale) :
+   - Commence par une accroche percutante ("hook").
+   - Dure entre 30s et 75s (grand maximum 90s).
+   - Se termine sur une conclusion nette.
+4. Note chaque extrait avec un "virality_score" de 1 à 10 et classe les plus forts en premier.
+
+Format de réponse : UNIQUEMENT un tableau JSON valide sans texte avant ni après.
+Exemple :
 [
-  {{"title": "L'erreur fatale", "hook": "Le vrai problème, c'est...", "summary": "Explication sur...", "start": 12.4, "end": 64.2, "virality_score": 9}}
+  {{"title": "Le coup de gueule", "hook": "La vérité c'est que...", "summary": "Explication sur...", "start": 45.2, "end": 98.4, "virality_score": 9}}
 ]
 
 Transcription :

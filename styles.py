@@ -227,23 +227,30 @@ class SubChunk:
     end: float
 
 
-def generate_dialogue_line(chunk: SubChunk, active_idx: int, preset: SubStylePreset) -> str:
+def generate_dialogue_line(
+    chunk: SubChunk,
+    active_idx: int,
+    preset: SubStylePreset,
+    next_chunk_start: Optional[float] = None
+) -> str:
     """
     Renders an ASS Dialogue line where `active_idx` within `chunk.words` is highlighted.
     Fixes flickering by ensuring smooth, continuous word-to-word transitions within the phrase,
     so the highlighted word accurately tracks the speaker's vocal progression.
+    Guarantees strict non-overlapping boundaries with subsequent chunks to eliminate visual stacking.
     """
     active_word = chunk.words[active_idx]
     start_sec = active_word.start
 
     if active_idx < len(chunk.words) - 1:
-        # Next word in same chunk: active word stays highlighted until the speaker speaks the next word!
-        # Eliminates inter-word subtitle blackouts and synchronizes highlight transition to exact acoustic onset.
+        # Next word in same chunk: active word stays highlighted until the speaker speaks the next word
         next_word = chunk.words[active_idx + 1]
-        end_sec = max(start_sec + 0.08, next_word.start)
+        end_sec = max(start_sec + 0.05, next_word.start)
     else:
-        # Last word in chunk: displays until word ends, with at least 150ms hold so short final words don't vanish
-        end_sec = max(start_sec + 0.15, active_word.end)
+        # Last word in chunk: displays until word ends, capped strictly before next chunk starts
+        end_sec = max(start_sec + 0.12, active_word.end)
+        if next_chunk_start is not None and end_sec > next_chunk_start:
+            end_sec = max(start_sec + 0.05, next_chunk_start - 0.01)
 
     start_str = format_ass_time(start_sec)
     end_str = format_ass_time(end_sec)
@@ -327,14 +334,54 @@ def generate_dialogue_line(chunk: SubChunk, active_idx: int, preset: SubStylePre
 
 
 def chunks_to_ass(chunks: List[SubChunk], preset: SubStylePreset, play_res_x: int = 1080, play_res_y: int = 1920) -> str:
-    """Converts a list of word chunks into a full ASS subtitle document."""
-    lines = [build_ass_header(preset, play_res_x, play_res_y)]
+    """
+    Converts a list of word chunks into a full ASS subtitle document.
+    Automatically adapts vertical placement, scale and font sizes for 16:9 horizontal videos
+    versus 9:16 vertical TikTok videos, and enforces strict boundary isolation between lines.
+    """
+    is_horizontal = (play_res_x > play_res_y)
 
-    for chunk in chunks:
+    if is_horizontal:
+        # 16:9 Landscape / Horizontal Video calibration:
+        # Places subtitles cleanly in the lower third (not in the center of the speaker's face!)
+        adapted_preset = SubStylePreset(
+            name=preset.name,
+            font_name=preset.font_name,
+            font_size=max(28, int(round(preset.font_size * 0.62))),
+            primary_color=preset.primary_color,
+            highlight_color=preset.highlight_color,
+            outline_color=preset.outline_color,
+            outline_width=max(2.0, round(preset.outline_width * 0.70, 1)),
+            shadow_color=preset.shadow_color,
+            shadow_depth=max(1.0, round(preset.shadow_depth * 0.70, 1)),
+            blur=round(preset.blur * 0.70, 1),
+            all_caps=preset.all_caps,
+            animation=preset.animation,
+            anim_speed_ms=preset.anim_speed_ms,
+            anim_scale=preset.anim_scale,
+            margin_v=max(45, int(round(play_res_y * 0.10))),  # ~108px on 1080p, clean lower third
+        )
+    else:
+        adapted_preset = preset
+
+    lines = [build_ass_header(adapted_preset, play_res_x, play_res_y)]
+
+    for c_idx, chunk in enumerate(chunks):
         if not chunk.words:
             continue
+
+        next_chunk_start = None
+        if c_idx + 1 < len(chunks) and chunks[c_idx + 1].words:
+            next_chunk_start = chunks[c_idx + 1].words[0].start
+
         for idx in range(len(chunk.words)):
-            line = generate_dialogue_line(chunk, idx, preset)
+            is_last_word = (idx == len(chunk.words) - 1)
+            line = generate_dialogue_line(
+                chunk,
+                idx,
+                adapted_preset,
+                next_chunk_start=next_chunk_start if is_last_word else None
+            )
             lines.append(line)
 
     return "\n".join(lines) + "\n"
