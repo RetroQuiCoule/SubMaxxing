@@ -1965,18 +1965,22 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         function setLanguage(lang) {
             currentLang = lang;
-            localStorage.setItem('submaxxing_lang', lang);
+            try { localStorage.setItem('submaxxing_lang', lang); } catch (e) {}
 
-            document.getElementById('btnLangEN').className = 'lang-btn' + (lang === 'en' ? ' active' : '');
-            document.getElementById('btnLangFR').className = 'lang-btn' + (lang === 'fr' ? ' active' : '');
+            const btnEN = document.getElementById('btnLangEN');
+            const btnFR = document.getElementById('btnLangFR');
+            if (btnEN) btnEN.className = 'lang-btn' + (lang === 'en' ? ' active' : '');
+            if (btnFR) btnFR.className = 'lang-btn' + (lang === 'fr' ? ' active' : '');
 
             const dict = I18N[lang];
-            document.querySelectorAll('[data-i18n]').forEach(el => {
-                const key = el.getAttribute('data-i18n');
-                if (dict[key]) {
-                    el.innerHTML = dict[key];
-                }
-            });
+            if (dict) {
+                document.querySelectorAll('[data-i18n]').forEach(el => {
+                    const key = el.getAttribute('data-i18n');
+                    if (dict[key]) {
+                        el.innerHTML = dict[key];
+                    }
+                });
+            }
 
             updateMockup();
         }
@@ -1991,7 +1995,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         function setGlobalVideo(fullPath, sourceModule) {
             if (!fullPath) return;
             const clean = fullPath.trim().replace(/^"(.*)"$/, '$1');
-            const filename = clean.split(/[/\\\\]/).pop();
+            const filename = clean.replace(/\\\\/g, '/').split('/').pop();
 
             // 1. Inputs
             const vPath = document.getElementById('videoPath');
@@ -2016,7 +2020,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (scPh) scPh.style.display = 'none';
                 scPlayer.style.display = 'block';
                 scPlayer.src = `/api/stream_video?path=${encodeURIComponent(clean)}`;
-                scPlayer.load();
+                try { scPlayer.load(); } catch (e) {}
             }
 
             // 4. Reframe Player
@@ -2026,7 +2030,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (rfPh) rfPh.style.display = 'none';
                 rfPlayer.style.display = 'block';
                 rfPlayer.src = `/api/stream_video?path=${encodeURIComponent(clean)}`;
-                rfPlayer.load();
+                try { rfPlayer.load(); } catch (e) {}
                 rfPlayer.play().catch(() => {});
             }
 
@@ -2045,7 +2049,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         function onSrtPathChanged(val) {
             if (!val) return;
             const clean = val.trim().replace(/^"(.*)"$/, '$1');
-            const filename = clean.split(/[/\\\\]/).pop();
+            const filename = clean.replace(/\\\\/g, '/').split('/').pop();
             const badge = document.getElementById('srtBadge');
             if (badge) {
                 badge.innerText = filename;
@@ -2280,7 +2284,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         async function runSmartCutAnalysis() {
             const vpath = document.getElementById('smartCutVideoPath').value;
             if (!vpath) {
-                alert('Veuillez d\'abord sélectionner une vidéo.');
+                alert("Veuillez d'abord sélectionner une vidéo.");
                 return;
             }
 
@@ -2318,7 +2322,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 }, 500);
 
                 if (!data.success) {
-                    alert('Erreur lors de l\'analyse : ' + data.error);
+                    alert("Erreur lors de l'analyse : " + data.error);
                     return;
                 }
 
@@ -2340,14 +2344,14 @@ HTML_CONTENT = """<!DOCTYPE html>
             } catch (err) {
                 btn.disabled = false;
                 document.getElementById('smartCutProgressWrap').style.display = 'none';
-                alert('Erreur réseau / analyse : ' + err);
+                alert("Erreur réseau / analyse : " + err);
             }
         }
 
         async function renderSmartCutVideo() {
             const vpath = smartCutData.video;
             if (!vpath) {
-                alert('Aucune vidéo analysée.');
+                alert("Aucune vidéo analysée.");
                 return;
             }
 
@@ -2382,7 +2386,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     return;
                 }
 
-                const safePath = data.output.replace(/\\\\/g, '\\\\\\\\');
+                const safePath = (data.output || '').replace(/\\\\/g, '/');
                 statusBox.innerHTML = `
                     <div style="color:var(--accent); font-weight:700; margin-bottom:8px;">Vidéo générée avec succès (${(data.final_duration || 0).toFixed(1)}s)</div>
                     <div style="font-size:0.8rem; color:var(--text); word-break:break-all; margin-bottom:12px;">${data.output}</div>
@@ -2410,6 +2414,23 @@ HTML_CONTENT = """<!DOCTYPE html>
             } catch (err) {
                 btn.disabled = false;
                 statusBox.innerHTML = `<div style="color:var(--pink);">Erreur réseau : ${err}</div>`;
+            }
+        }
+
+        async function openFileInExplorer(filePath) {
+            if (!filePath) return;
+            try {
+                const resp = await fetch('/api/open_folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: filePath })
+                });
+                const res = await resp.json();
+                if (!res.success) {
+                    console.warn("Could not open file explorer:", res);
+                }
+            } catch (err) {
+                console.error("openFileInExplorer error:", err);
             }
         }
 
@@ -2453,15 +2474,17 @@ HTML_CONTENT = """<!DOCTYPE html>
         const srtGroup = document.getElementById('srtGroup');
         const whisperGroup = document.getElementById('whisperGroup');
 
-        autoTranscribeCheck.addEventListener('change', () => {
-            if (autoTranscribeCheck.checked) {
-                srtGroup.style.display = 'none';
-                whisperGroup.style.display = 'grid';
-            } else {
-                srtGroup.style.display = 'block';
-                whisperGroup.style.display = 'none';
-            }
-        });
+        if (autoTranscribeCheck && srtGroup && whisperGroup) {
+            autoTranscribeCheck.addEventListener('change', () => {
+                if (autoTranscribeCheck.checked) {
+                    srtGroup.style.display = 'none';
+                    whisperGroup.style.display = 'grid';
+                } else {
+                    srtGroup.style.display = 'block';
+                    whisperGroup.style.display = 'none';
+                }
+            });
+        }
 
         // Toggle Advanced Accordion
         function toggleAdvanced() {
@@ -2535,37 +2558,42 @@ HTML_CONTENT = """<!DOCTYPE html>
         };
 
         function applyPresetToControls() {
-            const key = document.getElementById('stylePreset').value;
+            const stylePresetEl = document.getElementById('stylePreset');
+            if (!stylePresetEl) return;
+            const key = stylePresetEl.value;
             const p = PRESETS[key] || PRESETS.hormozi;
 
-            document.getElementById('highlightColor').value = p.highlight;
-            document.getElementById('highlightColorHex').value = p.highlight;
-            document.getElementById('primaryColor').value = p.primary;
-            document.getElementById('primaryColorHex').value = p.primary;
-            document.getElementById('outlineColor').value = p.outline;
-            document.getElementById('outlineColorHex').value = p.outline;
+            const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+            setVal('highlightColor', p.highlight);
+            setVal('highlightColorHex', p.highlight);
+            setVal('primaryColor', p.primary);
+            setVal('primaryColorHex', p.primary);
+            setVal('outlineColor', p.outline);
+            setVal('outlineColorHex', p.outline);
 
-            document.getElementById('outlineWidth').value = p.outlineWidth;
-            document.getElementById('shadowDepth').value = p.shadowDepth;
-            document.getElementById('glow').value = p.glow;
-            document.getElementById('fontName').value = p.font;
-            document.getElementById('fontSize').value = p.size;
-            document.getElementById('animation').value = p.anim;
-            document.getElementById('animSpeed').value = p.speed;
-            document.getElementById('animScale').value = p.scale;
-            document.getElementById('allCaps').checked = p.allCaps;
+            setVal('outlineWidth', p.outlineWidth);
+            setVal('shadowDepth', p.shadowDepth);
+            setVal('glow', p.glow);
+            setVal('fontName', p.font);
+            setVal('fontSize', p.size);
+            setVal('animation', p.anim);
+            setVal('animSpeed', p.speed);
+            setVal('animScale', p.scale);
+            const allCapsEl = document.getElementById('allCaps');
+            if (allCapsEl) allCapsEl.checked = p.allCaps;
 
             updateMockup();
         }
 
         // Live Subtitles Mockup Render Loop
-        const mockupContainer = document.getElementById('mockupContainer');
-        const mockupText = document.getElementById('mockupText');
-        const previewPlayer = document.getElementById('previewPlayer');
-
         let currentWordIndex = 0;
         function updateMockup() {
-            const posY = parseInt(document.getElementById('posY').value);
+            const mockupContainer = document.getElementById('mockupContainer');
+            const mockupText = document.getElementById('mockupText');
+            const posYInput = document.getElementById('posY');
+            if (!mockupContainer || !mockupText || !posYInput) return;
+
+            const posY = parseInt(posYInput.value);
             const outlineW = parseFloat(document.getElementById('outlineWidth').value);
             const shadowD = parseFloat(document.getElementById('shadowDepth').value);
             const glowVal = parseFloat(document.getElementById('glow').value);
@@ -2581,13 +2609,14 @@ HTML_CONTENT = """<!DOCTYPE html>
             const primary = document.getElementById('primaryColor').value;
             const outline = document.getElementById('outlineColor').value;
 
-            document.getElementById('posYVal').innerText = `${posY}px`;
-            document.getElementById('outlineWidthVal').innerText = `${outlineW}px`;
-            document.getElementById('shadowDepthVal').innerText = `${shadowD}px`;
-            document.getElementById('glowVal').innerText = `${glowVal}`;
-            document.getElementById('fontSizeVal').innerText = `${fontSize}px`;
-            document.getElementById('animSpeedVal').innerText = `${animSpeed}ms`;
-            document.getElementById('animScaleVal').innerText = `${animScale}%`;
+            const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.innerText = txt; };
+            setTxt('posYVal', `${posY}px`);
+            setTxt('outlineWidthVal', `${outlineW}px`);
+            setTxt('shadowDepthVal', `${shadowD}px`);
+            setTxt('glowVal', `${glowVal}`);
+            setTxt('fontSizeVal', `${fontSize}px`);
+            setTxt('animSpeedVal', `${animSpeed}ms`);
+            setTxt('animScaleVal', `${animScale}%`);
 
             const scaledBottom = Math.round((posY / 1920) * 586);
             mockupContainer.style.bottom = `${scaledBottom}px`;
@@ -2695,10 +2724,14 @@ HTML_CONTENT = """<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success) {
-                    mockupContainer.style.display = 'none';
-                    previewPlayer.style.display = 'block';
-                    previewPlayer.src = `/api/get_preview_video?t=${Date.now()}`;
-                    previewPlayer.play();
+                    const mContainer = document.getElementById('mockupContainer');
+                    const pPlayer = document.getElementById('previewPlayer');
+                    if (mContainer) mContainer.style.display = 'none';
+                    if (pPlayer) {
+                        pPlayer.style.display = 'block';
+                        pPlayer.src = `/api/get_preview_video?t=${Date.now()}`;
+                        pPlayer.play().catch(() => {});
+                    }
                 } else {
                     alert("Error: " + data.error);
                 }
@@ -2711,10 +2744,12 @@ HTML_CONTENT = """<!DOCTYPE html>
         }
 
         // Full Subtitles Render Submission
-        document.getElementById('subForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btnSubmit = document.getElementById('btnSubmit');
-            const statusBox = document.getElementById('statusBox');
+        const subForm = document.getElementById('subForm');
+        if (subForm) {
+            subForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const btnSubmit = document.getElementById('btnSubmit');
+                const statusBox = document.getElementById('statusBox');
 
             const video = getCurrentGlobalVideo();
             if (!video) {
@@ -2776,17 +2811,18 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const data = await res.json();
                 if (data.success) {
                     prog.complete(currentLang === 'fr' ? 'Rendu vidéo terminé avec succès !' : 'Render completed successfully!');
+                    const safePath = (data.outputPath || '').replace(/\\\\/g, '/');
                     statusBox.innerHTML = `
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); flex-wrap:wrap; gap:8px;">
     <span style="font-weight:700; color:#4ade80;">${I18N[currentLang].successMsg}</span>
     <div style="display:flex; flex-wrap:wrap; gap:8px;">
-        <button type="button" class="btn-pill" onclick="openFileInExplorer('${(data.outputPath || '').replace(/\\\\/g, '\\\\\\\\')}')">
+        <button type="button" class="btn-pill" onclick="openFileInExplorer('${safePath}')">
             ${I18N[currentLang].openFolderBtn}
         </button>
-        <button type="button" class="btn-pill btn-pipeline" onclick="sendToReframe('${(data.outputPath || '').replace(/\\\\/g, '\\\\\\\\')}')">
+        <button type="button" class="btn-pill btn-pipeline" onclick="sendToReframe('${safePath}')">
             Recadrer en 9:16
         </button>
-        <button type="button" class="btn-pill btn-pipeline" onclick="sendToSmartCut('${(data.outputPath || '').replace(/\\\\/g, '\\\\\\\\')}')">
+        <button type="button" class="btn-pill btn-pipeline" onclick="sendToSmartCut('${safePath}')">
             Découper dans AutoCut
         </button>
     </div>
@@ -2811,6 +2847,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 if (textEl) textEl.innerText = origText;
             }
         });
+    }
 
         // ================= REAL-TIME PROGRESS CONTROLLER =================
         function trackRealtimeProgress(jobType, btnId, btnFillId, btnTextId, barFillId, pctId, lblId, wrapId) {
@@ -2937,19 +2974,22 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             // 2. Live CSS Color Grading & Filter on video
             const player = document.getElementById('reframePlayer');
-            const cVal = 1 + (contrast / 100);
-            const sVal = 1 + (saturation / 100);
-            const bVal = 1 + (brightness / 100);
-            player.style.filter = `contrast(${cVal}) saturate(${sVal}) brightness(${bVal}) url(#reframeSharpnessFilter)`;
+            if (player) {
+                const cVal = 1 + (contrast / 100);
+                const sVal = 1 + (saturation / 100);
+                const bVal = 1 + (brightness / 100);
+                player.style.filter = `contrast(${cVal}) saturate(${sVal}) brightness(${bVal}) url(#reframeSharpnessFilter)`;
 
-            // 3. Framing Object-Position (Manual Pan & Center)
-            if (mode === 'manual') {
-                const panPct = parseInt(document.getElementById('manualPan').value);
-                player.style.objectPosition = `${panPct}% center`;
-            } else if (mode === 'center') {
-                player.style.objectPosition = '50% center';
-            } else {
-                player.style.objectPosition = 'center center';
+                // 3. Framing Object-Position (Manual Pan & Center)
+                if (mode === 'manual') {
+                    const panEl = document.getElementById('manualPan');
+                    const panPct = panEl ? parseInt(panEl.value) : 50;
+                    player.style.objectPosition = `${panPct}% center`;
+                } else if (mode === 'center') {
+                    player.style.objectPosition = '50% center';
+                } else {
+                    player.style.objectPosition = 'center center';
+                }
             }
 
             // 4. Subtle Cinema Radial Vignette (Matches FFmpeg Calibrated Curve)
@@ -3132,7 +3172,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     prog.complete(currentLang === 'fr' ? 'Vidéo 9:16 exportée avec succès !' : '9:16 Video exported successfully!');
                     const box = document.getElementById('reframeStatusBox');
                     if (box) {
-                        const safePath = data.outputPath.replace(/\\\\/g, '\\\\\\\\');
+                        const safePath = (data.outputPath || '').replace(/\\\\/g, '/');
                         box.style.display = 'block';
                         box.innerHTML = `
 <div style="margin-bottom:8px;">
@@ -3161,23 +3201,6 @@ HTML_CONTENT = """<!DOCTYPE html>
                 alert("Error: " + err.message);
             } finally {
                 btn.disabled = false;
-            }
-        }
-
-        async function openFileInExplorer(filePath) {
-            if (!filePath) return;
-            try {
-                const resp = await fetch('/api/open_folder', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: filePath })
-                });
-                const res = await resp.json();
-                if (!res.success) {
-                    console.warn("Could not open file explorer:", res);
-                }
-            } catch (err) {
-                console.error("openFileInExplorer error:", err);
             }
         }
 
@@ -3475,6 +3498,9 @@ class SubHandler(BaseHTTPRequestHandler):
         if parsed.path == "/" or parsed.path == "/index.html":
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
             self.end_headers()
             self.wfile.write(HTML_CONTENT.encode("utf-8"))
         elif parsed.path == "/api/progress":
