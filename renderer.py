@@ -225,6 +225,23 @@ def run_ffmpeg_with_progress(
         progress_callback(100.0, duration, duration, speed)
 
 
+def has_audio_stream(video_path: str) -> bool:
+    """Checks if the video/audio file contains an audio stream."""
+    ffprobe = get_ffprobe_path()
+    cmd = [
+        ffprobe, "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=codec_type",
+        "-of", "csv=p=0",
+        video_path
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        return "audio" in res.stdout.lower()
+    except Exception:
+        return False
+
+
 def render_subtitles_to_video(
     video_path: str,
     ass_path: str,
@@ -233,7 +250,8 @@ def render_subtitles_to_video(
     compress: bool = True,
     crf: int = 22,
     duration_limit: Optional[float] = None,
-    progress_callback: Optional[Callable[[float, float, float, str], None]] = None
+    progress_callback: Optional[Callable[[float, float, float, str], None]] = None,
+    normalize_audio: bool = False
 ) -> str:
     """
     Burns ASS subtitles into video_path, outputting to output_path.
@@ -295,7 +313,13 @@ def render_subtitles_to_video(
         extra_opts += ["-movflags", "+faststart"]
 
     # Audio handling: AAC 192k for clean compression; copy for quick preview
-    audio_args = ["-c:a", "copy"] if is_preview else ["-c:a", "aac", "-b:a", "192k"]
+    # If normalize_audio is enabled, apply broadcast EBU R128 loudnorm (-14 LUFS, -0.5 dB True Peak)
+    if is_preview:
+        audio_args = ["-c:a", "copy"]
+    elif normalize_audio and has_audio_stream(video_path):
+        audio_args = ["-af", "loudnorm=I=-14:TP=-0.5:LRA=11", "-c:a", "aac", "-b:a", "192k"]
+    else:
+        audio_args = ["-c:a", "aac", "-b:a", "192k"]
 
     cmd = [
         ffmpeg, "-y",

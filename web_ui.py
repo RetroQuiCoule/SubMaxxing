@@ -202,6 +202,94 @@ HTML_CONTENT = """<!DOCTYPE html>
             box-shadow: 0 2px 6px rgba(0,0,0,0.4);
         }
 
+        .nav-center {
+            display: flex;
+            align-items: center;
+            background: #090d15;
+            padding: 4px;
+            border-radius: 12px;
+            box-shadow: var(--neu-inset);
+            border: 1px solid var(--border);
+            gap: 4px;
+        }
+        .view-nav-btn {
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .view-nav-btn:hover {
+            color: var(--text);
+        }
+        .view-nav-btn.active {
+            background: var(--surface-raised);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            border: 1px solid var(--border-highlight);
+        }
+
+        /* Smart Cut & Topics */
+        .topic-item {
+            background: var(--surface-raised);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .topic-item:hover {
+            border-color: var(--border-highlight);
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .topic-item.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.2);
+            background: rgba(0, 242, 254, 0.05);
+        }
+        .cut-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface-raised);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.82rem;
+            transition: all 0.2s;
+        }
+        .cut-item.disabled {
+            opacity: 0.4;
+            text-decoration: line-through;
+        }
+        .badge-score {
+            background: var(--accent);
+            color: #080d17;
+            font-weight: 800;
+            font-size: 0.72rem;
+            padding: 2px 7px;
+            border-radius: 5px;
+        }
+        .badge-cut {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-cut-silence { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+        .badge-cut-filler { background: rgba(255, 0, 127, 0.15); color: #ff007f; }
+        .badge-cut-stutter { background: rgba(255, 230, 0, 0.15); color: #ffe600; }
+        .badge-cut-mixed { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+        .badge-cut-trim { background: rgba(0, 242, 254, 0.15); color: #00f2fe; }
+
         /* Layouts */
         .main-layout {
             display: grid;
@@ -328,6 +416,47 @@ HTML_CONTENT = """<!DOCTYPE html>
         .file-badge.has-file {
             color: var(--accent);
             border-color: rgba(0, 242, 254, 0.3);
+        }
+
+        .path-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: #090d15;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.82rem;
+            font-family: Consolas, monospace;
+            box-shadow: var(--neu-inset);
+            outline: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s ease;
+        }
+        .path-input:focus {
+            border-color: var(--accent);
+        }
+        .pipeline-notice {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(0, 242, 254, 0.08);
+            border: 1px solid rgba(0, 242, 254, 0.25);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: var(--accent);
+        }
+        .btn-pipeline {
+            border-color: rgba(0, 242, 254, 0.4);
+            background: rgba(0, 242, 254, 0.1);
+            color: #fff;
+        }
+        .btn-pipeline:hover {
+            border-color: var(--accent);
+            background: rgba(0, 242, 254, 0.2);
+            color: #fff;
+        }
+        .dropzone-active {
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.3) !important;
         }
 
         /* Inputs & Sliders */
@@ -936,9 +1065,21 @@ HTML_CONTENT = """<!DOCTYPE html>
             </div>
         </a>
 
+        <div class="nav-center">
+            <button type="button" class="view-nav-btn active" id="btnNavSubs" onclick="switchView('subtitles')">
+                <span data-i18n="navSubtitles">Sous-titres</span>
+            </button>
+            <button type="button" class="view-nav-btn" id="btnNavSmartCut" onclick="switchView('smartcut')">
+                <span data-i18n="navSmartCut">AutoCut & Thèmes</span>
+            </button>
+            <button type="button" class="view-nav-btn" id="btnNavReframe" onclick="switchView('reframe')">
+                <span data-i18n="navReframe">Reframe 9:16</span>
+            </button>
+        </div>
+
         <div class="nav-right">
             <button type="button" class="btn-pill" id="navBackBtn" style="display:none;" onclick="switchView('subtitles')">
-                ⬅️ <span data-i18n="backToSubs">Back to Subtitles</span>
+                <span data-i18n="backToSubs">Back to Subtitles</span>
             </button>
             <div class="lang-switch">
                 <button type="button" class="lang-btn active" id="btnLangEN" onclick="setLanguage('en')">EN</button>
@@ -955,48 +1096,56 @@ HTML_CONTENT = """<!DOCTYPE html>
                     <!-- 1. Files -->
                     <div class="card">
                         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                            <div class="card-title-left" data-i18n="section1Title">📁 1. Video & Subtitles</div>
+                            <div class="card-title-left" data-i18n="section1Title">1. Video & Subtitles</div>
                             <div id="cacheControlWrap" style="display:inline-flex; align-items:center; gap:8px; font-size:0.75rem;">
                                 <span id="cacheBadge" style="background:rgba(255,255,255,0.06); padding:4px 9px; border-radius:6px; color:var(--text-dim); border:1px solid var(--border); font-family:Consolas, monospace;">
-                                    💾 <span id="cacheInfoText">Cache: ...</span>
+                                    <span id="cacheInfoText">Cache: ...</span>
                                 </span>
                                 <button type="button" class="btn-pill" onclick="clearAppCache()" style="padding:4px 10px; font-size:0.74rem; border-radius:6px; cursor:pointer;" data-i18n="clearCacheBtn">
-                                    🗑️ Clear Cache
+                                    Clear Cache
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Video Selection + Reframe button side-by-side -->
-                        <div class="form-group">
-                            <label data-i18n="videoLabel">9:16 Video (MP4 / MOV):</label>
-                            <input type="hidden" id="videoPath" value="">
+                        <!-- Video Selection + Pipeline triggers -->
+                        <div class="form-group" id="subsVideoBox">
+                            <label data-i18n="videoLabel">Vidéo (MP4 / MOV) :</label>
                             <div class="file-control-row">
                                 <button type="button" class="btn-pill" onclick="browseFile('video')">
-                                    📁 <span data-i18n="browseVideo">Browse Video...</span>
+                                    <span data-i18n="browseVideo">Parcourir Vidéo...</span>
                                 </button>
                                 <button type="button" class="btn-reframe-trigger" onclick="openReframeView()">
-                                    📐 <span data-i18n="reframeBtn">Reframe</span>
+                                    <span data-i18n="reframeBtn">Reframe 9:16</span>
                                 </button>
-                                <div class="file-badge" id="videoBadge" data-i18n="noVideoSelected">No video selected</div>
+                                <button type="button" class="btn-pill" onclick="switchView('smartcut')" style="font-size:0.78rem;">
+                                    <span>AutoCut & Thèmes</span>
+                                </button>
+                                <div class="file-badge" id="videoBadge" data-i18n="noVideoSelected">Aucune vidéo sélectionnée</div>
                             </div>
+                            <div style="margin-top:8px;">
+                                <input type="text" id="videoPath" class="path-input" placeholder="Chemin du fichier vidéo (ex: C:/Videos/clip.mp4) ou coller ici..." oninput="setGlobalVideo(this.value, 'subtitles')">
+                            </div>
+                            <div id="subtitlesPipelineNotice" class="pipeline-notice" style="display:none;"></div>
                         </div>
 
                         <div class="form-group" style="margin-top:16px;">
                             <label class="toggle-container">
                                 <input type="checkbox" id="autoTranscribe" checked>
-                                <span data-i18n="transcribeCheckbox">🎙️ <b>Transcribe with Local Whisper</b> (large-v3-turbo on RTX GPU)</span>
+                                <span data-i18n="transcribeCheckbox"><b>Transcribe with Local Whisper</b> (large-v3-turbo on RTX GPU)</span>
                             </label>
                         </div>
 
                         <!-- SRT Selection -->
                         <div class="form-group" id="srtGroup" style="display: none;">
                             <label data-i18n="srtLabel">Existing SRT Subtitles (e.g. Buzz Whisper):</label>
-                            <input type="hidden" id="srtPath" value="">
                             <div class="file-control-row">
                                 <button type="button" class="btn-pill" onclick="browseFile('srt')">
-                                    📁 <span data-i18n="browseSrt">Browse SRT...</span>
+                                    <span data-i18n="browseSrt">Browse SRT...</span>
                                 </button>
                                 <div class="file-badge" id="srtBadge" data-i18n="noSrtSelected">No SRT selected</div>
+                            </div>
+                            <div style="margin-top:8px;">
+                                <input type="text" id="srtPath" class="path-input" placeholder="Chemin du fichier SRT (optionnel)..." oninput="onSrtPathChanged(this.value)">
                             </div>
                         </div>
 
@@ -1023,7 +1172,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     <!-- 2. Style & Presets -->
                     <div class="card">
                         <div class="card-title">
-                            <div class="card-title-left" data-i18n="section2Title">🎨 2. Style Preset & Pacing</div>
+                            <div class="card-title-left" data-i18n="section2Title">2. Style Preset & Pacing</div>
                         </div>
 
                         <div class="row">
@@ -1073,7 +1222,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                         <!-- 3. Advanced Accordion -->
                         <div class="advanced-header" onclick="toggleAdvanced()">
-                            <span data-i18n="advancedTitle">⚙️ ADVANCED MODE (Full Customization)</span>
+                            <span data-i18n="advancedTitle">ADVANCED MODE (Full Customization)</span>
                             <span id="advChevron">▼</span>
                         </div>
 
@@ -1176,34 +1325,38 @@ HTML_CONTENT = """<!DOCTYPE html>
                         </div>
                     </div>
 
-                    <!-- 4. Export -->
+                    <!-- 3. Export -->
                     <div class="card">
                         <div class="card-title">
-                            <div class="card-title-left" data-i18n="section3Title">🚀 3. Render & Export</div>
+                            <div class="card-title-left" data-i18n="section3Title">3. Render & Export</div>
                         </div>
 
                         <div class="form-group">
                             <label data-i18n="renderFormatLabel">Export Format:</label>
                             <select id="renderType">
-                                <option value="burn" selected data-i18n="optBurn">🎬 Burned Video (Full MP4 with embedded subtitles via RTX GPU)</option>
-                                <option value="overlay_mov" data-i18n="optProres">✨ Transparent ProRes 4444 Overlay (.MOV for CapCut / Premiere)</option>
-                                <option value="overlay_webm" data-i18n="optWebm">🌐 Transparent WebM Overlay (.webm)</option>
-                                <option value="both" data-i18n="optBoth">⚡ Both (Burned MP4 + Transparent ProRes)</option>
+                                <option value="burn" selected data-i18n="optBurn">Burned Video (Full MP4 with embedded subtitles via RTX GPU)</option>
+                                <option value="overlay_mov" data-i18n="optProres">Transparent ProRes 4444 Overlay (.MOV for CapCut / Premiere)</option>
+                                <option value="overlay_webm" data-i18n="optWebm">Transparent WebM Overlay (.webm)</option>
+                                <option value="both" data-i18n="optBoth">Both (Burned MP4 + Transparent ProRes)</option>
                             </select>
                         </div>
 
                         <div class="export-options-box">
                             <label class="toggle-container" style="font-size: 0.85rem; font-weight: 500; cursor: pointer;">
                                 <input type="checkbox" id="compressVideo" checked>
-                                <span data-i18n="compressVideoLabel">📦 <b>Smart Video Compression</b> (TikTok / Web optimized, Faststart, AAC)</span>
+                                <span data-i18n="compressVideoLabel"><b>Smart Video Compression</b> (TikTok / Web optimized, Faststart, AAC)</span>
                             </label>
                             <label class="toggle-container" style="font-size: 0.85rem; font-weight: 500; cursor: pointer;">
                                 <input type="checkbox" id="exportSubFiles">
-                                <span data-i18n="exportSubFilesLabel">📄 Also export subtitle files (.srt & .ass)</span>
+                                <span data-i18n="exportSubFilesLabel">Also export subtitle files (.srt & .ass)</span>
                             </label>
                             <label class="toggle-container" id="keepRawReframedGroup" style="font-size: 0.85rem; font-weight: 500; cursor: pointer; display: none;">
                                 <input type="checkbox" id="keepRawReframed">
-                                <span data-i18n="keepRawReframedLabel">🎞️ Keep raw 9:16 video (without subtitles)</span>
+                                <span data-i18n="keepRawReframedLabel">Keep raw 9:16 video (without subtitles)</span>
+                            </label>
+                            <label class="toggle-container" style="font-size: 0.85rem; font-weight: 500; cursor: pointer;">
+                                <input type="checkbox" id="chkNormalizeAudio" checked>
+                                <span data-i18n="normalizeAudioLabel"><b>Égaliser le son à 0 dB Clean</b> (Normalisation EBU R128 anti-saturation)</span>
                             </label>
                         </div>
 
@@ -1214,7 +1367,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                         <div class="progress-wrap" id="mainProgressWrap" style="display:none;">
                             <div class="progress-header">
-                                <span class="progress-label" id="mainProgressLabel">⚙️ Processing video...</span>
+                                <span class="progress-label" id="mainProgressLabel">Processing video...</span>
                                 <span class="progress-pct" id="mainProgressPct">0%</span>
                             </div>
                             <div class="progress-track">
@@ -1231,7 +1384,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="preview-col preview-sticky">
                 <div class="card">
                     <div class="card-title">
-                        <div class="card-title-left" data-i18n="previewTitle">📱 9:16 TikTok Preview</div>
+                        <div class="card-title-left" data-i18n="previewTitle">9:16 TikTok Preview</div>
                         <div style="font-size: 0.8rem; font-weight: normal;">
                             <label style="display:inline-flex; align-items:center; gap:5px; margin:0; cursor:pointer;">
                                 <input type="checkbox" id="toggleSafeZone" onchange="toggleSafeZoneGuide()">
@@ -1288,7 +1441,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                     </div>
 
                     <button type="button" class="btn-preview" id="btnTestPreview" onclick="generateVideoPreview()">
-                        <span>🎬</span> <b data-i18n="btnPreview">Preview On My Video (3s Clip)</b>
+                        <b data-i18n="btnPreview">Preview On My Video (3s Clip)</b>
                     </button>
                     <p style="font-size:0.75rem; color:var(--text-dim); text-align:center;" data-i18n="previewDesc">
                         Renders the first 3 seconds of your actual video with RTX GPU in ~0.5s.
@@ -1306,28 +1459,38 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <div class="card">
                     <div class="card-title">
                         <div class="card-title-left">
-                            <span>📐</span> <span data-i18n="reframeTitle">Reframe Studio (16:9 → 9:16)</span>
+                            <span data-i18n="reframeTitle">Reframe Studio (16:9 → 9:16)</span>
                         </div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group" id="reframeVideoBox">
                         <label data-i18n="sourceVideoLabel">Source 16:9 Video:</label>
                         <div class="file-control-row">
                             <button type="button" class="btn-pill" onclick="browseFile('reframe_video')">
-                                📁 <span data-i18n="browseVideo">Browse Video...</span>
+                                <span data-i18n="browseVideo">Browse Video...</span>
+                            </button>
+                            <button type="button" class="btn-pill" onclick="switchView('smartcut')" style="font-size:0.78rem;">
+                                <span>AutoCut & Thèmes</span>
+                            </button>
+                            <button type="button" class="btn-pill" onclick="switchView('subtitles')" style="font-size:0.78rem;">
+                                <span>Sous-titres</span>
                             </button>
                             <div class="file-badge" id="reframeVideoBadge" data-i18n="noVideoSelected">No video selected</div>
                         </div>
+                        <div style="margin-top:8px;">
+                            <input type="text" id="reframeVideoPath" class="path-input" placeholder="Chemin du fichier 16:9 ou coller ici..." oninput="setGlobalVideo(this.value, 'reframe')">
+                        </div>
+                        <div id="reframePipelineNotice" class="pipeline-notice" style="display:none;"></div>
                     </div>
 
                     <div class="form-group" style="margin-top:16px;">
                         <label data-i18n="framingModeLabel">Framing Mode:</label>
                         <select id="reframeMode" onchange="updateReframePreview()">
-                            <option value="face_track" selected data-i18n="optFaceTrack">🎯 Auto Face Tracking (Smart Pan on Speaker)</option>
-                            <option value="split_screen" data-i18n="optSplitScreen">👥 Podcast / Split-Screen (Stacked Top & Bottom)</option>
-                            <option value="blurred_bg" data-i18n="optBlurredBg">🌌 Blurred Background (16:9 Center + Blown Blur)</option>
-                            <option value="center" data-i18n="optCenterCrop">⏹️ Fixed Center Crop</option>
-                            <option value="manual" data-i18n="optManualPan">🖐️ Manual Pan Slider</option>
+                            <option value="face_track" selected data-i18n="optFaceTrack">Auto Face Tracking (Smart Pan on Speaker)</option>
+                            <option value="split_screen" data-i18n="optSplitScreen">Podcast / Split-Screen (Stacked Top & Bottom)</option>
+                            <option value="blurred_bg" data-i18n="optBlurredBg">Blurred Background (16:9 Center + Blown Blur)</option>
+                            <option value="center" data-i18n="optCenterCrop">Fixed Center Crop</option>
+                            <option value="manual" data-i18n="optManualPan">Manual Pan Slider</option>
                         </select>
                     </div>
 
@@ -1344,7 +1507,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <div class="card">
                     <div class="card-title">
                         <div class="card-title-left">
-                            <span>✨</span> <span data-i18n="gradingTitle">Video Grading & Enhancements</span>
+                            <span data-i18n="gradingTitle">Video Grading & Enhancements</span>
                         </div>
                     </div>
 
@@ -1393,20 +1556,27 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                 <!-- 3. Finish Action -->
                 <div class="card">
+                    <div style="margin-bottom:12px;">
+                        <label class="toggle-container" style="font-size:0.85rem; font-weight:500; cursor:pointer;">
+                            <input type="checkbox" id="chkReframeNormalizeAudio" checked>
+                            <span><b>Égaliser le son à 0 dB Clean</b> (Normalisation EBU R128 anti-saturation)</span>
+                        </label>
+                    </div>
+
                     <button type="button" class="btn-submit btn-reframe-submit" id="btnApplyReframe" onclick="applyAndReturnToSubtitles()">
                         <div class="btn-progress-fill" id="reframeBtnProgressFill"></div>
-                        <span class="btn-text-content" id="reframeBtnText">💾 <span data-i18n="btnApplyReframe">Apply Reframe & Return To Subtitles</span></span>
+                        <span class="btn-text-content" id="reframeBtnText"><span data-i18n="btnApplyReframe">Apply Reframe & Return To Subtitles</span></span>
                     </button>
 
                     <div style="margin-top: 10px;">
                         <button type="button" class="btn-pill" id="btnExportReframeOnly" onclick="exportReframeOnly()" style="width: 100%; justify-content: center; padding: 11px 14px; font-weight: 700; border-color: rgba(168, 85, 247, 0.4);">
-                            🎬 <span data-i18n="btnExportReframeOnly">Export 9:16 Video Only (Without Subtitles)</span>
+                            <span data-i18n="btnExportReframeOnly">Export 9:16 Video Only (Without Subtitles)</span>
                         </button>
                     </div>
 
                     <div class="progress-wrap" id="reframeProgressWrap" style="display:none;">
                         <div class="progress-header">
-                            <span class="progress-label" id="reframeProgressLabel">⚙️ Reframing with GPU NVENC...</span>
+                            <span class="progress-label" id="reframeProgressLabel">Reframing with GPU NVENC...</span>
                             <span class="progress-pct" id="reframeProgressPct">0%</span>
                         </div>
                         <div class="progress-track">
@@ -1422,22 +1592,22 @@ HTML_CONTENT = """<!DOCTYPE html>
             <div class="preview-col preview-sticky">
                 <div class="card">
                     <div class="card-title">
-                        <div class="card-title-left" data-i18n="reframePreviewTitle">📱 9:16 Reframed Output Preview</div>
-                        <div id="reframeModeBadge" class="mode-badge-header">🎯 Smart Face Track</div>
+                        <div class="card-title-left" data-i18n="reframePreviewTitle">9:16 Reframed Output Preview</div>
+                        <div id="reframeModeBadge" class="mode-badge-header">Smart Face Track</div>
                     </div>
 
                     <div class="phone-wrapper" id="reframePhoneWrapper">
                         <video id="reframePlayer" class="reframe-phone-video" controls autoplay loop playsinline></video>
                         <div id="reframeVignetteOverlay" class="reframe-vignette-overlay"></div>
                         <div id="reframePlaceholder" class="reframe-placeholder">
-                            <div class="reframe-ph-icon">📐</div>
+                            <div class="reframe-ph-icon" style="font-size:2.5rem; opacity:0.6;">▶</div>
                             <div class="reframe-ph-title" data-i18n="reframePlaceholderTitle">9:16 Canvas Ready</div>
                             <div class="reframe-ph-desc" data-i18n="reframePlaceholderText">Select a video to inspect framing & color grading.</div>
                         </div>
                     </div>
 
                     <button type="button" class="btn-preview" id="btnTestReframePreview" onclick="generateReframe3sPreview()">
-                        <span>🎬</span> <b data-i18n="btnPreviewReframe">Preview Reframed Clip (3s)</b>
+                        <b data-i18n="btnPreviewReframe">Preview Reframed Clip (3s)</b>
                     </button>
                     <p style="font-size:0.75rem; color:var(--text-dim); text-align:center;" data-i18n="previewReframeDesc">
                         Fast GPU render with face tracking & color grading in ~0.5s.
@@ -1447,27 +1617,211 @@ HTML_CONTENT = """<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- ================= VIEW 3: SMART CUT & THEMES STUDIO ================= -->
+    <div id="viewSmartCut" class="view-section">
+        <div class="main-layout">
+            <div class="controls-col">
+                <!-- 1. Source & Settings -->
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-title-left">1. Analyse & Découpage Intelligent</div>
+                    </div>
+                    <div class="form-group" id="smartCutVideoBox">
+                        <label>Vidéo Source (Interview, Podcast, Débat) :</label>
+                        <div class="file-control-row">
+                            <button type="button" class="btn-pill" onclick="browseSmartCutVideo()">
+                                <span data-i18n="browseVideo">Parcourir Vidéo...</span>
+                            </button>
+                            <button type="button" class="btn-pill" onclick="switchView('reframe')" style="font-size:0.78rem;">
+                                <span>Reframe 9:16</span>
+                            </button>
+                            <button type="button" class="btn-pill" onclick="switchView('subtitles')" style="font-size:0.78rem;">
+                                <span>Sous-titres</span>
+                            </button>
+                            <div class="file-badge" id="smartCutVideoBadge">Aucune vidéo sélectionnée</div>
+                        </div>
+                        <div style="margin-top:8px;">
+                            <input type="text" id="smartCutVideoPath" class="path-input" placeholder="Chemin de la vidéo 16:9 ou coller ici..." oninput="setGlobalVideo(this.value, 'smartcut')">
+                        </div>
+                        <div id="smartCutPipelineNotice" class="pipeline-notice" style="display:none;"></div>
+                    </div>
+
+                    <div class="row" style="margin-top:14px;">
+                        <div class="form-group">
+                            <label>Seuil de Silence (<span id="silenceThreshVal">0.50</span>s) :</label>
+                            <div class="slider-group">
+                                <input type="range" id="silenceThreshSlider" min="0.2" max="1.5" step="0.05" value="0.5" oninput="document.getElementById('silenceThreshVal').innerText = parseFloat(this.value).toFixed(2); document.getElementById('silenceThreshValDisplay').innerText = parseFloat(this.value).toFixed(2) + 's';">
+                                <span class="slider-val" id="silenceThreshValDisplay">0.50s</span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Moteur de Découpage :</label>
+                            <select id="smartCutEngine">
+                                <option value="heuristic" selected>Analyse Sémantique Locale (Instantané)</option>
+                                <option value="llm">Micro-LLM Local (Ollama / GGUF)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+                        <label class="toggle-container" style="font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" id="chkDetectStutters" checked>
+                            <span>Supprimer les bégaiements et répétitions immédiates</span>
+                        </label>
+                        <label class="toggle-container" style="font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" id="chkDetectFillers" checked>
+                            <span>Supprimer les tics de langage et hésitations (euh, bah, genre...)</span>
+                        </label>
+                    </div>
+
+                    <div id="smartCutLlmOptions" style="display:none; margin-top:14px; padding:12px; background:var(--surface-raised); border-radius:10px; border:1px solid var(--border);">
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label style="font-size:0.75rem;">URL Endpoint Ollama :</label>
+                            <input type="text" id="smartCutLlmUrl" value="http://localhost:11434/v1" class="text-input" style="width:100%; font-size:0.8rem; padding:6px 10px; background:#0d111a; border:1px solid var(--border); color:#fff; border-radius:6px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label style="font-size:0.75rem;">Modèle Ollama :</label>
+                            <input type="text" id="smartCutLlmModel" value="llama3.2:3b" class="text-input" style="width:100%; font-size:0.8rem; padding:6px 10px; background:#0d111a; border:1px solid var(--border); color:#fff; border-radius:6px;">
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-submit" id="btnRunSmartCutAnalysis" onclick="runSmartCutAnalysis()" style="margin-top:16px;">
+                        <span class="btn-text-content">Analyser la vidéo (Détection thèmes & jumpcuts)</span>
+                    </button>
+
+                    <div class="progress-wrap" id="smartCutProgressWrap" style="display:none;">
+                        <div class="progress-header">
+                            <span class="progress-label" id="smartCutProgressLabel">Transcription Whisper & Analyse...</span>
+                            <span class="progress-pct" id="smartCutProgressPct">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill progress-fill-cyan" id="smartCutProgressBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Thematic Chapters (Moments Pertinents) -->
+                <div class="card" id="cardTopics" style="display:none;">
+                    <div class="card-title">
+                        <div class="card-title-left">2. Thèmes & Extraits Détectés</div>
+                        <span id="topicsCountBadge" class="brand-badge">0 extraits</span>
+                    </div>
+                    <p style="font-size:0.8rem; color:var(--text-dim); margin-bottom:12px;">
+                        Cliquez sur un extrait pour l'isoler au montage (format Short/Reel), ou gardez la vidéo entière.
+                    </p>
+                    <div id="topicsContainer" style="display:flex; flex-direction:column; gap:10px; max-height:280px; overflow-y:auto; padding-right:4px;">
+                        <!-- Injected dynamically -->
+                    </div>
+                </div>
+
+                <!-- 3. Jump-Cuts Review Table -->
+                <div class="card" id="cardCuts" style="display:none;">
+                    <div class="card-title">
+                        <div class="card-title-left">3. Coupes Proposées (Jump-Cuts à valider)</div>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="btn-pill" onclick="toggleAllCuts(true)" style="padding:4px 10px; font-size:0.75rem;">Tout activer</button>
+                            <button type="button" class="btn-pill" onclick="toggleAllCuts(false)" style="padding:4px 10px; font-size:0.75rem;">Tout désactiver</button>
+                        </div>
+                    </div>
+                    <div id="cutsSummaryBar" style="font-size:0.85rem; color:var(--accent); margin-bottom:10px; font-weight:600;"></div>
+                    <div id="cutsContainer" style="display:flex; flex-direction:column; gap:6px; max-height:260px; overflow-y:auto; padding-right:4px;">
+                        <!-- Injected dynamically -->
+                    </div>
+                </div>
+
+                <!-- 4. Render Action -->
+                <div class="card" id="cardRenderSmartCut" style="display:none;">
+                    <div class="card-title">
+                        <div class="card-title-left">4. Export & Rendu Dynamisé</div>
+                    </div>
+
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+                        <label class="toggle-container" style="font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" id="chkSmartCutSubtitles" checked>
+                            <span>Incruster les sous-titres animés synchronisés</span>
+                        </label>
+                        <select id="smartCutPreset" style="width:160px; font-size:0.8rem;">
+                            <option value="hormozi" selected>Hormozi</option>
+                            <option value="mrbeast">MrBeast</option>
+                            <option value="neon_glow">Neon Glow</option>
+                            <option value="clean_minimal">Clean Minimal</option>
+                            <option value="tiktok_bold">TikTok Bold</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom:14px;">
+                        <label class="toggle-container" style="font-size:0.85rem; font-weight:500; cursor:pointer;">
+                            <input type="checkbox" id="chkSmartCutNormalizeAudio" checked>
+                            <span><b>Égaliser le son à 0 dB Clean</b> (Anti-saturation / Voix claire)</span>
+                        </label>
+                    </div>
+
+                    <button type="button" class="btn-submit" id="btnRenderSmartCut" onclick="renderSmartCutVideo()">
+                        <span class="btn-text-content">Générer la Vidéo Dynamisée (Jumpcuts)</span>
+                    </button>
+
+                    <div id="smartCutStatusBox" style="display:none; margin-top:12px;" class="card"></div>
+                </div>
+            </div>
+
+            <!-- Right: Preview & Stats Player -->
+            <div class="preview-col preview-sticky">
+                <div class="card">
+                    <div class="card-title">
+                        <div class="card-title-left">Lecteur & Prévisualisation</div>
+                    </div>
+                    <div class="phone-wrapper">
+                        <video id="smartCutPlayer" class="reframe-phone-video" controls playsinline></video>
+                        <div id="smartCutPlaceholder" class="reframe-placeholder">
+                            <div class="reframe-ph-icon" style="font-size:2.5rem; opacity:0.6;">▶</div>
+                            <div class="reframe-ph-title">Lecteur Prêt</div>
+                            <div class="reframe-ph-desc">Sélectionnez une vidéo pour analyser les thèmes et les coupes.</div>
+                        </div>
+                    </div>
+
+                    <div id="smartCutStatsPanel" style="display:none; margin-top:14px; padding:12px; background:var(--surface-raised); border-radius:10px; font-size:0.85rem; border:1px solid var(--border);">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                            <span style="color:var(--text-dim);">Durée sélectionnée :</span>
+                            <span id="statOrigDur" style="font-weight:700;">-</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                            <span style="color:var(--text-dim);">Temps supprimé :</span>
+                            <span id="statCutDur" style="color:var(--pink); font-weight:700;">-</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span style="color:var(--text-dim);">Durée finale estimée :</span>
+                            <span id="statNewDur" style="color:var(--accent); font-weight:700;">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Bilingual Dictionary
         const I18N = {
             en: {
-                section1Title: "📁 1. Video & Subtitles",
+                navSubtitles: "Subtitles",
+                navSmartCut: "AutoCut & Topics",
+                navReframe: "Reframe 9:16",
+                section1Title: "1. Video & Subtitles",
                 videoLabel: "9:16 Video (MP4 / MOV):",
                 browseVideo: "Browse Video...",
                 reframeBtn: "Reframe",
                 noVideoSelected: "No video selected",
-                transcribeCheckbox: "🎙️ <b>Transcribe with Local Whisper</b> (large-v3-turbo on RTX GPU)",
+                transcribeCheckbox: "<b>Transcribe with Local Whisper</b> (large-v3-turbo on RTX GPU)",
                 srtLabel: "Existing SRT Subtitles (e.g. Buzz Whisper):",
                 browseSrt: "Browse SRT...",
                 noSrtSelected: "No SRT selected",
                 langLabel: "Audio Language:",
                 modelLabel: "Whisper Model:",
-                section2Title: "🎨 2. Style Preset & Pacing",
+                section2Title: "2. Style Preset & Pacing",
                 presetLabel: "Style Preset:",
                 wordsPerChunkLabel: "Words Per Screen:",
                 animationLabel: "Animation:",
                 verticalPosLabel: "Vertical Position (Height):",
-                advancedTitle: "⚙️ ADVANCED MODE (Full Customization)",
+                advancedTitle: "ADVANCED MODE (Full Customization)",
                 highlightColorLabel: "Active Word (Highlight):",
                 primaryColorLabel: "Base Text Color:",
                 outlineColorLabel: "Outline Color:",
@@ -1479,14 +1833,14 @@ HTML_CONTENT = """<!DOCTYPE html>
                 animSpeedLabel: "Bounce / Pop Speed (ms):",
                 animScaleLabel: "Peak Pop Scale (%):",
                 allCapsLabel: "<b>Force ALL CAPS (Uppercase)</b>",
-                section3Title: "🚀 3. Render & Export",
+                section3Title: "3. Render & Export",
                 renderFormatLabel: "Export Format:",
-                optBurn: "🎬 Burned Video (Full MP4 with embedded subtitles via RTX GPU)",
-                optProres: "✨ Transparent ProRes 4444 Overlay (.MOV for CapCut / Premiere)",
-                optWebm: "🌐 Transparent WebM Overlay (.webm)",
-                optBoth: "⚡ Both (Burned MP4 + Transparent ProRes)",
+                optBurn: "Burned Video (Full MP4 with embedded subtitles via RTX GPU)",
+                optProres: "Transparent ProRes 4444 Overlay (.MOV for CapCut / Premiere)",
+                optWebm: "Transparent WebM Overlay (.webm)",
+                optBoth: "Both (Burned MP4 + Transparent ProRes)",
                 btnSubmit: "GENERATE COMPLETE RENDER",
-                previewTitle: "📱 9:16 TikTok Preview",
+                previewTitle: "9:16 TikTok Preview",
                 safeZoneToggle: "Safe Zone Guide",
                 safeZoneLabel: "SUBTITLES SAFE ZONE",
                 btnPreview: "Preview On My Video (3s Clip)",
@@ -1495,11 +1849,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                 reframeTitle: "Reframe Studio (16:9 → 9:16)",
                 sourceVideoLabel: "Source 16:9 Video:",
                 framingModeLabel: "Framing Mode:",
-                optFaceTrack: "🎯 Auto Face Tracking (Smart Pan on Speaker)",
-                optSplitScreen: "👥 Podcast / Split-Screen (Stacked Top & Bottom)",
-                optBlurredBg: "🌌 Blurred Background (16:9 Center + Blown Blur)",
-                optCenterCrop: "⏹️ Fixed Center Crop",
-                optManualPan: "🖐️ Manual Pan Slider",
+                optFaceTrack: "Auto Face Tracking (Smart Pan on Speaker)",
+                optSplitScreen: "Podcast / Split-Screen (Stacked Top & Bottom)",
+                optBlurredBg: "Blurred Background (16:9 Center + Blown Blur)",
+                optCenterCrop: "Fixed Center Crop",
+                optManualPan: "Manual Pan Slider",
                 manualPanLabel: "Manual Camera Pan (Left → Right):",
                 gradingTitle: "Video Grading & Enhancements",
                 sharpnessLabel: "Sharpness (Nettoyage):",
@@ -1512,37 +1866,41 @@ HTML_CONTENT = """<!DOCTYPE html>
                 exportSubFilesLabel: "Also export subtitle files (.srt & .ass)",
                 keepRawReframedLabel: "Keep intermediate raw 9:16 video (without subtitles)",
                 reframeExportSuccess: "Reframed 9:16 video saved to: ",
-                reframePreviewTitle: "📱 9:16 Reframed Output Preview",
+                reframePreviewTitle: "9:16 Reframed Output Preview",
                 reframePlaceholderTitle: "9:16 Canvas Ready",
                 reframePlaceholderText: "Select a video and click Preview Reframed Clip to inspect AI framing & adjustments.",
                 btnPreviewReframe: "Preview Reframed Clip (3s)",
                 previewReframeDesc: "Fast GPU render with face tracking & color grading in ~0.5s.",
                 statusStart: "[*] Processing started locally...",
-                successMsg: "🎉 SUCCESS!",
-                errorMsg: "❌ ERROR:",
+                successMsg: "SUCCESS!",
+                errorMsg: "ERROR:",
                 openFolderBtn: "Open File Location",
-                clearCacheBtn: "🗑️ Clear Cache",
+                clearCacheBtn: "Clear Cache",
                 cacheClearedMsg: "Cache cleared successfully!",
-                compressVideoLabel: "📦 <b>Smart Video Compression</b> (TikTok / Web optimized, Faststart, AAC)"
+                compressVideoLabel: "<b>Smart Video Compression</b> (TikTok / Web optimized, Faststart, AAC)",
+                normalizeAudioLabel: "<b>Clean 0 dB Audio Normalization</b> (EBU R128 broadcast anti-clipping)"
             },
             fr: {
-                section1Title: "📁 1. Vidéo & Sous-titres",
+                navSubtitles: "Sous-titres",
+                navSmartCut: "AutoCut & Thèmes",
+                navReframe: "Reframe 9:16",
+                section1Title: "1. Vidéo & Sous-titres",
                 videoLabel: "Vidéo 9:16 (MP4 / MOV) :",
                 browseVideo: "Parcourir Vidéo...",
                 reframeBtn: "Reframe",
                 noVideoSelected: "Aucune vidéo sélectionnée",
-                transcribeCheckbox: "🎙️ <b>Générer avec Whisper local</b> (large-v3-turbo sur GPU RTX)",
+                transcribeCheckbox: "<b>Générer avec Whisper local</b> (large-v3-turbo sur GPU RTX)",
                 srtLabel: "Fichier SRT existant (ex: export Buzz Whisper) :",
                 browseSrt: "Parcourir SRT...",
                 noSrtSelected: "Aucun SRT sélectionné",
                 langLabel: "Langue audio :",
                 modelLabel: "Modèle Whisper :",
-                section2Title: "🎨 2. Modèle de Style & Pacing",
+                section2Title: "2. Modèle de Style & Pacing",
                 presetLabel: "Preset de Style :",
                 wordsPerChunkLabel: "Mots par écran :",
                 animationLabel: "Animation :",
                 verticalPosLabel: "Position Verticale (Hauteur) :",
-                advancedTitle: "⚙️ MODE AVANCÉ (Personnalisation complète)",
+                advancedTitle: "MODE AVANCÉ (Personnalisation complète)",
                 highlightColorLabel: "Mot actif (Surbrillance) :",
                 primaryColorLabel: "Texte normal (Base) :",
                 outlineColorLabel: "Couleur du contour :",
@@ -1554,14 +1912,14 @@ HTML_CONTENT = """<!DOCTYPE html>
                 animSpeedLabel: "Vitesse du rebond / pop (ms) :",
                 animScaleLabel: "Zoom / Échelle du rebond (%) :",
                 allCapsLabel: "<b>Forcer tout en MAJUSCULES (ALL CAPS)</b>",
-                section3Title: "🚀 3. Rendu & Export",
+                section3Title: "3. Rendu & Export",
                 renderFormatLabel: "Format d'exportation :",
-                optBurn: "🎬 Rendu complet (MP4 avec sous-titres incrustés via GPU RTX)",
-                optProres: "✨ Overlay Transparent ProRes 4444 (.MOV pour CapCut / Premiere)",
-                optWebm: "🌐 Overlay Transparent WebM (.webm)",
-                optBoth: "⚡ Les deux (MP4 incrusté + Overlay ProRes)",
+                optBurn: "Rendu complet (MP4 avec sous-titres incrustés via GPU RTX)",
+                optProres: "Overlay Transparent ProRes 4444 (.MOV pour CapCut / Premiere)",
+                optWebm: "Overlay Transparent WebM (.webm)",
+                optBoth: "Les deux (MP4 incrusté + Overlay ProRes)",
                 btnSubmit: "GÉNÉRER LE RENDU COMPLET",
-                previewTitle: "📱 Aperçu 9:16 TikTok",
+                previewTitle: "Aperçu 9:16 TikTok",
                 safeZoneToggle: "Guide Safe Zone",
                 safeZoneLabel: "ZONE IDÉALE SOUS-TITRES",
                 btnPreview: "Prévisualiser sur ma vidéo (Extrait 3s)",
@@ -1570,11 +1928,11 @@ HTML_CONTENT = """<!DOCTYPE html>
                 reframeTitle: "Studio Reframe (16:9 → 9:16)",
                 sourceVideoLabel: "Vidéo 16:9 Source :",
                 framingModeLabel: "Mode de Cadrage :",
-                optFaceTrack: "🎯 Suivi Automatique du Visage (Smart Pan)",
-                optSplitScreen: "👥 Podcast / Split-Screen (Empilement Haut / Bas)",
-                optBlurredBg: "🌌 Fond Flouté (16:9 au centre + arrière-plan flou)",
-                optCenterCrop: "⏹️ Centré Fixe",
-                optManualPan: "🖐️ Balayage Manuel (Slider)",
+                optFaceTrack: "Suivi Automatique du Visage (Smart Pan)",
+                optSplitScreen: "Podcast / Split-Screen (Empilement Haut / Bas)",
+                optBlurredBg: "Fond Flouté (16:9 au centre + arrière-plan flou)",
+                optCenterCrop: "Centré Fixe",
+                optManualPan: "Balayage Manuel (Slider)",
                 manualPanLabel: "Cadrage Manuel (Gauche → Droite) :",
                 gradingTitle: "Ajustements & Retouches Vidéo",
                 sharpnessLabel: "Netteté (Nettoyage) :",
@@ -1587,18 +1945,19 @@ HTML_CONTENT = """<!DOCTYPE html>
                 exportSubFilesLabel: "Exporter aussi les fichiers sous-titres (.srt & .ass)",
                 keepRawReframedLabel: "Conserver la vidéo 9:16 brute intermédiaire (sans sous-titres)",
                 reframeExportSuccess: "Vidéo 9:16 enregistrée sous : ",
-                reframePreviewTitle: "📱 Aperçu du Rendu 9:16",
+                reframePreviewTitle: "Aperçu du Rendu 9:16",
                 reframePlaceholderTitle: "Canevas 9:16 Prêt",
                 reframePlaceholderText: "Sélectionnez une vidéo et cliquez sur « Prévisualiser l'extrait » pour inspecter le cadrage IA et les retouches.",
                 btnPreviewReframe: "Prévisualiser l'extrait (3s)",
                 previewReframeDesc: "Rendu GPU rapide avec détection faciale & retouches en ~0.5s.",
                 statusStart: "[*] Lancement du traitement local...",
-                successMsg: "🎉 SUCCÈS !",
-                errorMsg: "❌ ERREUR :",
+                successMsg: "SUCCÈS !",
+                errorMsg: "ERREUR :",
                 openFolderBtn: "Ouvrir l'emplacement du fichier",
-                clearCacheBtn: "🗑️ Vider le cache",
+                clearCacheBtn: "Vider le cache",
                 cacheClearedMsg: "Cache vidé avec succès !",
-                compressVideoLabel: "📦 <b>Compression Vidéo Optimisée</b> (Optimisé TikTok / Web, Faststart, AAC)"
+                compressVideoLabel: "<b>Compression Vidéo Optimisée</b> (Optimisé TikTok / Web, Faststart, AAC)",
+                normalizeAudioLabel: "<b>Égaliser le son à 0 dB Clean</b> (Normalisation EBU R128 anti-saturation)"
             }
         };
 
@@ -1622,55 +1981,439 @@ HTML_CONTENT = """<!DOCTYPE html>
             updateMockup();
         }
 
-        // View Switcher (Subtitles <-> Reframe)
+        function getCurrentGlobalVideo() {
+            const v1 = document.getElementById('videoPath') ? document.getElementById('videoPath').value.trim() : '';
+            const v2 = document.getElementById('smartCutVideoPath') ? document.getElementById('smartCutVideoPath').value.trim() : '';
+            const v3 = document.getElementById('reframeVideoPath') ? document.getElementById('reframeVideoPath').value.trim() : '';
+            return v1 || v2 || v3 || '';
+        }
+
+        function setGlobalVideo(fullPath, sourceModule) {
+            if (!fullPath) return;
+            const clean = fullPath.trim().replace(/^"(.*)"$/, '$1');
+            const filename = clean.split(/[/\\\\]/).pop();
+
+            // 1. Inputs
+            const vPath = document.getElementById('videoPath');
+            const scPath = document.getElementById('smartCutVideoPath');
+            const rfPath = document.getElementById('reframeVideoPath');
+            if (vPath) vPath.value = clean;
+            if (scPath) scPath.value = clean;
+            if (rfPath) rfPath.value = clean;
+
+            // 2. Badges
+            const vBadge = document.getElementById('videoBadge');
+            const scBadge = document.getElementById('smartCutVideoBadge');
+            const rfBadge = document.getElementById('reframeVideoBadge');
+            if (vBadge) { vBadge.innerText = filename; vBadge.className = 'file-badge has-file'; }
+            if (scBadge) { scBadge.innerText = filename; scBadge.className = 'file-badge has-file'; }
+            if (rfBadge) { rfBadge.innerText = filename; rfBadge.className = 'file-badge has-file'; }
+
+            // 3. SmartCut Player
+            const scPlayer = document.getElementById('smartCutPlayer');
+            const scPh = document.getElementById('smartCutPlaceholder');
+            if (scPlayer) {
+                if (scPh) scPh.style.display = 'none';
+                scPlayer.style.display = 'block';
+                scPlayer.src = `/api/stream_video?path=${encodeURIComponent(clean)}`;
+                scPlayer.load();
+            }
+
+            // 4. Reframe Player
+            const rfPlayer = document.getElementById('reframePlayer');
+            const rfPh = document.getElementById('reframePlaceholder');
+            if (rfPlayer) {
+                if (rfPh) rfPh.style.display = 'none';
+                rfPlayer.style.display = 'block';
+                rfPlayer.src = `/api/stream_video?path=${encodeURIComponent(clean)}`;
+                rfPlayer.load();
+                rfPlayer.play().catch(() => {});
+            }
+
+            checkVideoCache(clean);
+        }
+
+        function setReframeVideo(fullPath) {
+            setGlobalVideo(fullPath, 'reframe');
+            updateReframePreview();
+        }
+
+        function setSmartCutVideo(fullPath) {
+            setGlobalVideo(fullPath, 'smartcut');
+        }
+
+        function onSrtPathChanged(val) {
+            if (!val) return;
+            const clean = val.trim().replace(/^"(.*)"$/, '$1');
+            const filename = clean.split(/[/\\\\]/).pop();
+            const badge = document.getElementById('srtBadge');
+            if (badge) {
+                badge.innerText = filename;
+                badge.className = 'file-badge has-file';
+            }
+        }
+
+        function sendToReframe(filePath) {
+            const path = filePath || getCurrentGlobalVideo();
+            if (!path) {
+                alert(currentLang === 'fr' ? "Veuillez d'abord sélectionner une vidéo." : "Please select a video first.");
+                return;
+            }
+            setGlobalVideo(path, 'smartcut');
+            switchView('reframe');
+            const notice = document.getElementById('reframePipelineNotice');
+            if (notice) {
+                notice.style.display = 'block';
+                notice.innerText = currentLang === 'fr'
+                    ? "Vidéo transférée depuis AutoCut. Choisissez votre cadrage 9:16 puis exportez ou passez aux sous-titres."
+                    : "Video received from AutoCut. Select your 9:16 framing, then export or send to subtitles.";
+            }
+        }
+
+        function sendToSubtitles(filePath) {
+            const path = filePath || getCurrentGlobalVideo();
+            if (!path) {
+                alert(currentLang === 'fr' ? "Veuillez d'abord sélectionner une vidéo." : "Please select a video first.");
+                return;
+            }
+            setGlobalVideo(path, 'reframe');
+            switchView('subtitles');
+            const notice = document.getElementById('subtitlesPipelineNotice');
+            if (notice) {
+                notice.style.display = 'block';
+                notice.innerText = currentLang === 'fr'
+                    ? "Vidéo chargée dans le studio de sous-titres. Personnalisez vos sous-titres animés ci-dessous."
+                    : "Video loaded in Subtitles Studio. Customize your animated subtitles below.";
+            }
+        }
+
+        function sendToSmartCut(filePath) {
+            const path = filePath || getCurrentGlobalVideo();
+            if (!path) {
+                alert(currentLang === 'fr' ? "Veuillez d'abord sélectionner une vidéo." : "Please select a video first.");
+                return;
+            }
+            setGlobalVideo(path, 'subtitles');
+            switchView('smartcut');
+            const notice = document.getElementById('smartCutPipelineNotice');
+            if (notice) {
+                notice.style.display = 'block';
+                notice.innerText = currentLang === 'fr'
+                    ? "Vidéo chargée dans AutoCut. Lancez l'analyse pour détecter les thèmes et jump-cuts."
+                    : "Video loaded in AutoCut. Run analysis to detect themes and jump-cuts.";
+            }
+        }
+
+        // View Switcher (Subtitles <-> SmartCut <-> Reframe)
         function switchView(viewName) {
             document.getElementById('viewSubtitles').className = 'view-section' + (viewName === 'subtitles' ? ' active' : '');
+            const vSmartCut = document.getElementById('viewSmartCut');
+            if (vSmartCut) vSmartCut.className = 'view-section' + (viewName === 'smartcut' ? ' active' : '');
             document.getElementById('viewReframe').className = 'view-section' + (viewName === 'reframe' ? ' active' : '');
-            document.getElementById('navBackBtn').style.display = (viewName === 'reframe') ? 'inline-flex' : 'none';
 
+            const btnSubs = document.getElementById('btnNavSubs');
+            const btnSmartCut = document.getElementById('btnNavSmartCut');
+            const btnReframe = document.getElementById('btnNavReframe');
+            if (btnSubs) btnSubs.className = 'view-nav-btn' + (viewName === 'subtitles' ? ' active' : '');
+            if (btnSmartCut) btnSmartCut.className = 'view-nav-btn' + (viewName === 'smartcut' ? ' active' : '');
+            if (btnReframe) btnReframe.className = 'view-nav-btn' + (viewName === 'reframe' ? ' active' : '');
+
+            document.getElementById('navBackBtn').style.display = (viewName !== 'subtitles') ? 'inline-flex' : 'none';
+
+            const currentVid = getCurrentGlobalVideo();
             const badge = document.getElementById('brandBadge');
             if (viewName === 'reframe') {
                 document.body.classList.add('theme-reframe');
                 if (badge) badge.innerText = 'REFRAME STUDIO';
-                const currentVid = document.getElementById('videoPath').value;
                 if (currentVid) {
-                    setReframeVideo(currentVid);
+                    setGlobalVideo(currentVid, 'reframe');
                 }
                 updateReframePreview();
+            } else if (viewName === 'smartcut') {
+                document.body.classList.remove('theme-reframe');
+                if (badge) badge.innerText = 'SMART CUT STUDIO';
+                if (currentVid) {
+                    setGlobalVideo(currentVid, 'smartcut');
+                }
             } else {
                 document.body.classList.remove('theme-reframe');
                 if (badge) badge.innerText = 'STUDIO PRO';
+                if (currentVid) {
+                    setGlobalVideo(currentVid, 'subtitles');
+                }
                 updateMockup();
             }
         }
 
         function openReframeView() {
-            const currentVid = document.getElementById('videoPath').value;
+            const currentVid = getCurrentGlobalVideo();
             if (currentVid) {
-                setReframeVideo(currentVid);
+                setGlobalVideo(currentVid, 'reframe');
             }
             switchView('reframe');
         }
 
-        function setReframeVideo(fullPath) {
-            document.getElementById('videoPath').value = fullPath;
-            const filename = fullPath.split(/[/\\\\]/).pop();
-            const badge = document.getElementById('reframeVideoBadge');
-            badge.innerText = '🎬 ' + filename;
-            badge.className = 'file-badge has-file';
+        // ================= SMART CUT & THEMES LOGIC =================
+        let smartCutData = {
+            video: '',
+            duration: 0,
+            cuts: [],
+            topics: [],
+            selectedTopic: null
+        };
 
-            // Instantly load video into reframe player for live preview & grading
-            const player = document.getElementById('reframePlayer');
-            const placeholder = document.getElementById('reframePlaceholder');
-            if (placeholder) placeholder.style.display = 'none';
-            if (player) {
-                player.style.display = 'block';
-                player.src = `/api/stream_video?path=${encodeURIComponent(fullPath)}`;
-                player.load();
-                player.play().catch(() => {});
-            }
-            updateReframePreview();
+        async function browseSmartCutVideo() {
+            await browseFile('video');
         }
+
+        function toggleAllCuts(enabled) {
+            smartCutData.cuts.forEach(c => c.enabled = enabled);
+            renderCutsList();
+            updateSmartCutStats();
+        }
+
+        function toggleCut(id) {
+            const cut = smartCutData.cuts.find(c => c.id === id);
+            if (cut) {
+                cut.enabled = !cut.enabled;
+                renderCutsList();
+                updateSmartCutStats();
+            }
+        }
+
+        function selectTopic(id) {
+            if (smartCutData.selectedTopic && smartCutData.selectedTopic.id === id) {
+                smartCutData.selectedTopic = null; // Toggle back to full
+            } else {
+                smartCutData.selectedTopic = smartCutData.topics.find(t => t.id === id) || null;
+            }
+            renderTopicsList();
+            updateSmartCutStats();
+            if (smartCutData.selectedTopic) {
+                const player = document.getElementById('smartCutPlayer');
+                if (player) {
+                    player.currentTime = smartCutData.selectedTopic.start;
+                    player.play().catch(() => {});
+                }
+            }
+        }
+
+        function updateSmartCutStats() {
+            const origDur = smartCutData.duration || 0;
+            let activeCuts = smartCutData.cuts.filter(c => c.enabled);
+
+            let cutDur = 0;
+            if (smartCutData.selectedTopic) {
+                const t = smartCutData.selectedTopic;
+                const cutsInTopic = activeCuts.filter(c => c.start >= t.start && c.end <= t.end);
+                cutDur = cutsInTopic.reduce((acc, c) => acc + c.duration, 0);
+                const topicOrig = t.duration;
+                document.getElementById('statOrigDur').innerText = topicOrig.toFixed(1) + 's (Extrait #' + t.id + ')';
+                document.getElementById('statCutDur').innerText = '-' + cutDur.toFixed(1) + 's (' + cutsInTopic.length + ' coupes)';
+                document.getElementById('statNewDur').innerText = Math.max(0, topicOrig - cutDur).toFixed(1) + 's';
+            } else {
+                cutDur = activeCuts.reduce((acc, c) => acc + c.duration, 0);
+                document.getElementById('statOrigDur').innerText = origDur.toFixed(1) + 's (Vidéo complète)';
+                document.getElementById('statCutDur').innerText = '-' + cutDur.toFixed(1) + 's (' + activeCuts.length + ' coupes)';
+                document.getElementById('statNewDur').innerText = Math.max(0, origDur - cutDur).toFixed(1) + 's';
+            }
+            document.getElementById('cutsSummaryBar').innerText = activeCuts.length + ' coupe(s) active(s) • ' + cutDur.toFixed(1) + 's supprimée(s)';
+        }
+
+        function renderTopicsList() {
+            const cont = document.getElementById('topicsContainer');
+            if (!smartCutData.topics || smartCutData.topics.length === 0) {
+                cont.innerHTML = '<p style="color:var(--text-dim); font-size:0.8rem;">Aucun thème distinct détecté.</p>';
+                return;
+            }
+            document.getElementById('topicsCountBadge').innerText = smartCutData.topics.length + ' extraits';
+
+            let html = '';
+            smartCutData.topics.forEach(t => {
+                const isSel = smartCutData.selectedTopic && smartCutData.selectedTopic.id === t.id;
+                html += `
+                    <div class="topic-item ${isSel ? 'selected' : ''}" onclick="selectTopic(${t.id})">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <b style="font-size:0.9rem; color:#fff;">${t.title}</b>
+                            <div style="display:flex; gap:6px; align-items:center;">
+                                <span class="badge-score">Score: ${t.virality_score}/10</span>
+                                <span style="font-size:0.75rem; color:var(--text-dim);">${t.start.toFixed(1)}s - ${t.end.toFixed(1)}s (${t.duration.toFixed(0)}s)</span>
+                            </div>
+                        </div>
+                        <div style="font-size:0.82rem; color:var(--accent); font-weight:600; margin-bottom:4px;">
+                            « ${t.hook || 'Extrait clé'} »
+                        </div>
+                        <div style="font-size:0.75rem; color:var(--text-dim);">
+                            ${t.summary}
+                        </div>
+                    </div>
+                `;
+            });
+            cont.innerHTML = html;
+        }
+
+        function renderCutsList() {
+            const cont = document.getElementById('cutsContainer');
+            if (!smartCutData.cuts || smartCutData.cuts.length === 0) {
+                cont.innerHTML = '<p style="color:var(--text-dim); font-size:0.8rem;">Aucun silence ou bégaiement détecté.</p>';
+                return;
+            }
+
+            let html = '';
+            smartCutData.cuts.forEach(c => {
+                const badgeClass = 'badge-cut badge-cut-' + (c.reason || 'silence');
+                html += `
+                    <div class="cut-item ${c.enabled ? '' : 'disabled'}">
+                        <label class="toggle-container" style="font-size:0.82rem; margin-bottom:0; cursor:pointer;" onclick="event.stopPropagation()">
+                            <input type="checkbox" ${c.enabled ? 'checked' : ''} onchange="toggleCut(${c.id})">
+                            <span style="font-family:Consolas, monospace;">[${c.start.toFixed(2)}s → ${c.end.toFixed(2)}s]</span>
+                            <span class="${badgeClass}" style="margin-left:6px;">${c.reason}</span>
+                            <span style="margin-left:8px; color:var(--text);">${c.text}</span>
+                        </label>
+                        <span style="font-size:0.75rem; color:var(--text-dim); font-family:Consolas, monospace;">-${c.duration.toFixed(2)}s</span>
+                    </div>
+                `;
+            });
+            cont.innerHTML = html;
+        }
+
+        async function runSmartCutAnalysis() {
+            const vpath = document.getElementById('smartCutVideoPath').value;
+            if (!vpath) {
+                alert('Veuillez d\'abord sélectionner une vidéo.');
+                return;
+            }
+
+            const minSilence = parseFloat(document.getElementById('silenceThreshSlider').value);
+            const detectStutters = document.getElementById('chkDetectStutters').checked;
+            const detectFillers = document.getElementById('chkDetectFillers').checked;
+            const engine = document.getElementById('smartCutEngine').value;
+            const llmUrl = document.getElementById('smartCutLlmUrl').value;
+            const llmModel = document.getElementById('smartCutLlmModel').value;
+
+            const btn = document.getElementById('btnRunSmartCutAnalysis');
+            btn.disabled = true;
+            document.getElementById('smartCutProgressWrap').style.display = 'block';
+            document.getElementById('smartCutProgressBar').style.width = '35%';
+
+            try {
+                const res = await fetch('/api/smartcut/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video: vpath,
+                        minSilence: minSilence,
+                        detectStutters: detectStutters,
+                        detectFillers: detectFillers,
+                        engine: engine,
+                        llmUrl: llmUrl,
+                        llmModel: llmModel
+                    })
+                });
+                const data = await res.json();
+                btn.disabled = false;
+                document.getElementById('smartCutProgressBar').style.width = '100%';
+                setTimeout(() => {
+                    document.getElementById('smartCutProgressWrap').style.display = 'none';
+                }, 500);
+
+                if (!data.success) {
+                    alert('Erreur lors de l\'analyse : ' + data.error);
+                    return;
+                }
+
+                smartCutData.video = vpath;
+                smartCutData.duration = data.duration;
+                smartCutData.cuts = data.cuts;
+                smartCutData.topics = data.topics;
+                smartCutData.selectedTopic = null;
+
+                document.getElementById('cardTopics').style.display = 'block';
+                document.getElementById('cardCuts').style.display = 'block';
+                document.getElementById('cardRenderSmartCut').style.display = 'block';
+                document.getElementById('smartCutStatsPanel').style.display = 'block';
+
+                renderTopicsList();
+                renderCutsList();
+                updateSmartCutStats();
+
+            } catch (err) {
+                btn.disabled = false;
+                document.getElementById('smartCutProgressWrap').style.display = 'none';
+                alert('Erreur réseau / analyse : ' + err);
+            }
+        }
+
+        async function renderSmartCutVideo() {
+            const vpath = smartCutData.video;
+            if (!vpath) {
+                alert('Aucune vidéo analysée.');
+                return;
+            }
+
+            const btn = document.getElementById('btnRenderSmartCut');
+            btn.disabled = true;
+            const statusBox = document.getElementById('smartCutStatusBox');
+            statusBox.style.display = 'block';
+            statusBox.innerHTML = '<div style="color:var(--accent);">Rendu en cours avec GPU NVENC & concassage audio...</div>';
+
+            const burnSubs = document.getElementById('chkSmartCutSubtitles').checked;
+            const preset = document.getElementById('smartCutPreset').value;
+            const normalizeAudio = document.getElementById('chkSmartCutNormalizeAudio') ? document.getElementById('chkSmartCutNormalizeAudio').checked : true;
+
+            try {
+                const res = await fetch('/api/smartcut/render', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video: vpath,
+                        cuts: smartCutData.cuts,
+                        selectedTopic: smartCutData.selectedTopic,
+                        burnSubtitles: burnSubs,
+                        preset: preset,
+                        normalize_audio: normalizeAudio
+                    })
+                });
+                const data = await res.json();
+                btn.disabled = false;
+
+                if (!data.success) {
+                    statusBox.innerHTML = `<div style="color:var(--pink);">Erreur de rendu : ${data.error}</div>`;
+                    return;
+                }
+
+                const safePath = data.output.replace(/\\\\/g, '\\\\\\\\');
+                statusBox.innerHTML = `
+                    <div style="color:var(--accent); font-weight:700; margin-bottom:8px;">Vidéo générée avec succès (${(data.final_duration || 0).toFixed(1)}s)</div>
+                    <div style="font-size:0.8rem; color:var(--text); word-break:break-all; margin-bottom:12px;">${data.output}</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                        <button type="button" class="btn-pill" onclick="openFileInExplorer('${safePath}')">
+                            Ouvrir l'emplacement
+                        </button>
+                        <button type="button" class="btn-pill btn-pipeline" onclick="sendToReframe('${safePath}')" style="border-color:rgba(168,85,247,0.6); background:rgba(168,85,247,0.15);">
+                            Envoyer vers Reframe (16:9 → 9:16)
+                        </button>
+                        <button type="button" class="btn-pill btn-pipeline" onclick="sendToSubtitles('${safePath}')" style="border-color:rgba(0,242,254,0.6); background:rgba(0,242,254,0.15);">
+                            Envoyer vers Sous-titres
+                        </button>
+                    </div>
+                `;
+
+                // Update player with the rendered video
+                const player = document.getElementById('smartCutPlayer');
+                if (player) {
+                    player.src = `/api/stream_video?path=${encodeURIComponent(data.output)}`;
+                    player.load();
+                    player.play().catch(() => {});
+                }
+
+            } catch (err) {
+                btn.disabled = false;
+                statusBox.innerHTML = `<div style="color:var(--pink);">Erreur réseau : ${err}</div>`;
+            }
+        }
+
+        const openFileLocation = openFileInExplorer;
 
         // Browse Native Windows Dialog
         async function browseFile(type) {
@@ -1678,30 +2421,16 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const targetType = (type === 'srt') ? 'srt' : 'video';
                 const res = await fetch(`/api/browse?type=${targetType}`, { method: 'POST' });
                 const data = await res.json();
-                if (data.path) {
-                    const filename = data.path.split(/[/\\\\]/).pop();
-                    if (type === 'video') {
-                        document.getElementById('videoPath').value = data.path;
-                        const badge = document.getElementById('videoBadge');
-                        badge.innerText = '🎬 ' + filename;
-                        badge.className = 'file-badge has-file';
-                        const rfBadge = document.getElementById('reframeVideoBadge');
-                        if (rfBadge) {
-                            rfBadge.innerText = '🎬 ' + filename;
-                            rfBadge.className = 'file-badge has-file';
-                        }
-                        checkVideoCache(data.path);
-                    } else if (type === 'srt') {
+                if (data && data.path) {
+                    if (type === 'srt') {
                         document.getElementById('srtPath').value = data.path;
-                        const badge = document.getElementById('srtBadge');
-                        badge.innerText = '📄 ' + filename;
-                        badge.className = 'file-badge has-file';
-                    } else if (type === 'reframe_video') {
-                        setReframeVideo(data.path);
+                        onSrtPathChanged(data.path);
+                    } else {
+                        setGlobalVideo(data.path, type);
                     }
                 }
             } catch (err) {
-                alert("File Explorer error: " + err.message);
+                console.error("Browse error:", err);
             }
         }
 
@@ -1712,8 +2441,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 const data = await res.json();
                 if (data.cached) {
                     const badge = document.getElementById('videoBadge');
-                    if (badge && !badge.innerText.includes('⚡')) {
-                        badge.innerText += ' (⚡ Prêt en cache)';
+                    if (badge && !badge.innerText.includes('Prêt en cache')) {
+                        badge.innerText += ' (Prêt en cache)';
                     }
                 }
             } catch (e) {}
@@ -1921,7 +2650,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
         // Subtitles 3-Second Video Preview
         async function generateVideoPreview() {
-            const video = document.getElementById('videoPath').value.trim();
+            const video = getCurrentGlobalVideo();
             const srt = document.getElementById('srtPath').value.trim();
             const autoTranscribe = autoTranscribeCheck.checked;
 
@@ -1932,7 +2661,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             const btn = document.getElementById('btnTestPreview');
             btn.disabled = true;
-            btn.innerHTML = currentLang === 'fr' ? "⏳ Rendu extrait 3s (GPU RTX)..." : "⏳ Rendering 3s preview (RTX GPU)...";
+            btn.innerHTML = currentLang === 'fr' ? "Rendu extrait 3s (GPU RTX)..." : "Rendering 3s preview (RTX GPU)...";
 
             const payload = {
                 video: video,
@@ -1977,7 +2706,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 alert("Error: " + err.message);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `<span>🎬</span> <b>${I18N[currentLang].btnPreview}</b>`;
+                btn.innerHTML = `<b>${I18N[currentLang].btnPreview}</b>`;
             }
         }
 
@@ -1987,7 +2716,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             const btnSubmit = document.getElementById('btnSubmit');
             const statusBox = document.getElementById('statusBox');
 
-            const video = document.getElementById('videoPath').value.trim();
+            const video = getCurrentGlobalVideo();
             if (!video) {
                 alert(currentLang === 'fr' ? "Veuillez d'abord sélectionner une vidéo." : "Please select a video first.");
                 return;
@@ -2034,7 +2763,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                 compress: document.getElementById('compressVideo') ? document.getElementById('compressVideo').checked : true,
                 exportSubFiles: document.getElementById('exportSubFiles').checked,
                 keepRawReframed: document.getElementById('keepRawReframed') ? document.getElementById('keepRawReframed').checked : false,
-                wasReframed: !!window._wasReframedInSession
+                wasReframed: !!window._wasReframedInSession,
+                normalizeAudio: document.getElementById('chkNormalizeAudio') ? document.getElementById('chkNormalizeAudio').checked : true
             };
 
             try {
@@ -2045,13 +2775,21 @@ HTML_CONTENT = """<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success) {
-                    prog.complete(currentLang === 'fr' ? '🎉 Rendu vidéo terminé avec succès !' : '🎉 Render completed successfully!');
+                    prog.complete(currentLang === 'fr' ? 'Rendu vidéo terminé avec succès !' : 'Render completed successfully!');
                     statusBox.innerHTML = `
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.1); flex-wrap:wrap; gap:8px;">
     <span style="font-weight:700; color:#4ade80;">${I18N[currentLang].successMsg}</span>
-    <button type="button" class="btn-pill" onclick="openFileInExplorer('${(data.outputPath || '').replace(/\\\\/g, '\\\\\\\\')}')" style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; font-size:0.82rem; font-weight:700; background:rgba(0,242,254,0.15); border:1px solid var(--accent); color:#fff; border-radius:8px; cursor:pointer;">
-        📁 ${I18N[currentLang].openFolderBtn}
-    </button>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button type="button" class="btn-pill" onclick="openFileInExplorer('${(data.outputPath || '').replace(/\\\\/g, '\\\\\\\\')}')">
+            ${I18N[currentLang].openFolderBtn}
+        </button>
+        <button type="button" class="btn-pill btn-pipeline" onclick="sendToReframe('${(data.outputPath || '').replace(/\\\\/g, '\\\\\\\\')}')">
+            Recadrer en 9:16
+        </button>
+        <button type="button" class="btn-pill btn-pipeline" onclick="sendToSmartCut('${(data.outputPath || '').replace(/\\\\/g, '\\\\\\\\')}')">
+            Découper dans AutoCut
+        </button>
+    </div>
 </div>
 <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:10px; word-break:break-all;">
     <b>${currentLang === 'fr' ? 'Fichier exporté :' : 'Exported file:'}</b> <code>${data.outputPath || ''}</code>
@@ -2091,7 +2829,7 @@ HTML_CONTENT = """<!DOCTYPE html>
             }
             if (btnFill) btnFill.style.width = '0%';
             if (pct) pct.innerText = '0%';
-            if (lbl) lbl.innerText = currentLang === 'fr' ? '⚙️ Initialisation du traitement...' : '⚙️ Initializing processing...';
+            if (lbl) lbl.innerText = currentLang === 'fr' ? 'Initialisation du traitement...' : 'Initializing processing...';
 
             let pollInterval = setInterval(async () => {
                 try {
@@ -2109,26 +2847,26 @@ HTML_CONTENT = """<!DOCTYPE html>
 
                         if (data.stage === 'whisper') {
                             desc = currentLang === 'fr'
-                                ? `🎙️ Whisper AI (CUDA GPU) : ${data.cur_sec}s / ${data.total_sec}s (${curPct}%)`
-                                : `🎙️ Whisper AI (CUDA GPU): ${data.cur_sec}s / ${data.total_sec}s (${curPct}%)`;
-                            btnDesc = `🎙️ Whisper ${curPct}%`;
+                                ? `Whisper AI (CUDA GPU) : ${data.cur_sec}s / ${data.total_sec}s (${curPct}%)`
+                                : `Whisper AI (CUDA GPU): ${data.cur_sec}s / ${data.total_sec}s (${curPct}%)`;
+                            btnDesc = `Whisper ${curPct}%`;
                         } else if (data.stage === 'face_track') {
                             desc = currentLang === 'fr'
-                                ? `🤖 Détection faciale & cadrage (${curPct}%)`
-                                : `🤖 OpenCV Face Tracking (${curPct}%)`;
-                            btnDesc = `🤖 Face Track ${curPct}%`;
+                                ? `Détection faciale & cadrage (${curPct}%)`
+                                : `OpenCV Face Tracking (${curPct}%)`;
+                            btnDesc = `Face Track ${curPct}%`;
                         } else if (data.stage === 'nvenc') {
                             desc = currentLang === 'fr'
-                                ? `⚡ GPU NVENC : ${data.cur_sec}s / ${data.total_sec}s (${curPct}%) • ${data.speed}`
-                                : `⚡ GPU NVENC: ${data.cur_sec}s / ${data.total_sec}s (${curPct}%) • ${data.speed}`;
-                            btnDesc = `⚡ NVENC ${curPct}% (${data.speed})`;
+                                ? `GPU NVENC : ${data.cur_sec}s / ${data.total_sec}s (${curPct}%) • ${data.speed}`
+                                : `GPU NVENC: ${data.cur_sec}s / ${data.total_sec}s (${curPct}%) • ${data.speed}`;
+                            btnDesc = `NVENC ${curPct}% (${data.speed})`;
                         } else if (data.stage === 'init') {
-                            desc = currentLang === 'fr' ? '⚙️ Préparation du flux vidéo...' : '⚙️ Preparing video stream...';
-                            btnDesc = `⚙️ ${curPct}%`;
+                            desc = currentLang === 'fr' ? 'Préparation du flux vidéo...' : 'Preparing video stream...';
+                            btnDesc = `${curPct}%`;
                         }
 
                         if (lbl) lbl.innerText = desc;
-                        if (btnText) btnText.innerHTML = `<span>⏳</span> <b>${btnDesc}</b>`;
+                        if (btnText) btnText.innerHTML = `<b>${btnDesc}</b>`;
                     }
                 } catch (e) {}
             }, 250);
@@ -2139,8 +2877,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                     if (barFill) barFill.style.width = '100%';
                     if (btnFill) btnFill.style.width = '100%';
                     if (pct) pct.innerText = '100%';
-                    if (lbl) lbl.innerText = msg || (currentLang === 'fr' ? '✅ Traitement terminé avec succès !' : '✅ Completed successfully!');
-                    if (btnText) btnText.innerHTML = `<span>🎉</span> <b>${currentLang === 'fr' ? 'TERMINÉ (100%)' : 'DONE (100%)'}</b>`;
+                    if (lbl) lbl.innerText = msg || (currentLang === 'fr' ? 'Traitement terminé avec succès !' : 'Completed successfully!');
+                    if (btnText) btnText.innerHTML = `<b>${currentLang === 'fr' ? 'TERMINÉ (100%)' : 'DONE (100%)'}</b>`;
                     setTimeout(() => {
                         if (wrap) wrap.style.display = 'none';
                         if (barFill) barFill.style.width = '0%';
@@ -2154,8 +2892,8 @@ HTML_CONTENT = """<!DOCTYPE html>
                         barFill.style.backgroundColor = '#ef4444';
                     }
                     if (btnFill) btnFill.style.width = '0%';
-                    if (lbl) lbl.innerText = errMsg || (currentLang === 'fr' ? '❌ Erreur' : '❌ Failed');
-                    if (btnText) btnText.innerHTML = `<span>❌</span> <b>${currentLang === 'fr' ? 'ERREUR' : 'ERROR'}</b>`;
+                    if (lbl) lbl.innerText = errMsg || (currentLang === 'fr' ? 'Erreur' : 'Failed');
+                    if (btnText) btnText.innerHTML = `<b>${currentLang === 'fr' ? 'ERREUR' : 'ERROR'}</b>`;
                     setTimeout(() => {
                         if (wrap) wrap.style.display = 'none';
                         if (barFill) {
@@ -2230,17 +2968,17 @@ HTML_CONTENT = """<!DOCTYPE html>
             // 5. Update Mode Badge text in header
             const modeBadge = document.getElementById('reframeModeBadge');
             const modeNames = {
-                face_track: '🎯 Smart Face Track',
-                split_screen: '👥 Podcast Split-Screen',
-                blurred_bg: '🌌 Blurred Background',
-                center: '⏹️ Fixed Center',
-                manual: '🖐️ Manual Pan'
+                face_track: 'Smart Face Track',
+                split_screen: 'Podcast Split-Screen',
+                blurred_bg: 'Blurred Background',
+                center: 'Fixed Center',
+                manual: 'Manual Pan'
             };
             if (modeBadge) modeBadge.innerText = modeNames[mode] || mode;
         }
 
         async function generateReframe3sPreview() {
-            const video = document.getElementById('videoPath').value.trim();
+            const video = getCurrentGlobalVideo();
             if (!video) {
                 alert(currentLang === 'fr' ? "Veuillez sélectionner une vidéo d'abord." : "Please select a video first.");
                 return;
@@ -2248,7 +2986,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
             const btn = document.getElementById('btnTestReframePreview');
             btn.disabled = true;
-            btn.innerHTML = currentLang === 'fr' ? "⏳ Rendu Reframe 3s (GPU)..." : "⏳ Rendering 3s Reframe (GPU)...";
+            btn.innerHTML = currentLang === 'fr' ? "Rendu Reframe 3s (GPU)..." : "Rendering 3s Reframe (GPU)...";
 
             const payload = {
                 video: video,
@@ -2283,12 +3021,12 @@ HTML_CONTENT = """<!DOCTYPE html>
                 alert("Error: " + err.message);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = `<span>🎬</span> <b data-i18n="btnPreviewReframe">${I18N[currentLang].btnPreviewReframe}</b>`;
+                btn.innerHTML = `<b data-i18n="btnPreviewReframe">${I18N[currentLang].btnPreviewReframe}</b>`;
             }
         }
 
         async function applyAndReturnToSubtitles() {
-            const video = document.getElementById('videoPath').value.trim();
+            const video = getCurrentGlobalVideo();
             if (!video) {
                 alert(currentLang === 'fr' ? "Veuillez sélectionner une vidéo 16:9." : "Please select a 16:9 video first.");
                 return;
@@ -2317,6 +3055,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 saturation: 1.0 + (parseFloat(document.getElementById('saturation').value) / 100.0),
                 brightness: parseFloat(document.getElementById('brightness').value) / 100.0,
                 vignette: parseFloat(document.getElementById('vignette').value) / 100.0,
+                normalize_audio: document.getElementById('chkReframeNormalizeAudio') ? document.getElementById('chkReframeNormalizeAudio').checked : true,
                 previewOnly: false
             };
 
@@ -2328,21 +3067,12 @@ HTML_CONTENT = """<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success && data.outputPath) {
-                    prog.complete(currentLang === 'fr' ? '🎉 Vidéo recadrée en 9:16 avec succès !' : '🎉 Reframed to 9:16 successfully!');
+                    prog.complete(currentLang === 'fr' ? 'Vidéo recadrée en 9:16 avec succès !' : 'Reframed to 9:16 successfully!');
                     window._wasReframedInSession = true;
                     const keepGroup = document.getElementById('keepRawReframedGroup');
                     if (keepGroup) keepGroup.style.display = 'flex';
 
-                    // Update main video path to newly reframed 9:16 video
-                    document.getElementById('videoPath').value = data.outputPath;
-                    const filename = data.outputPath.split(/[/\\\\]/).pop();
-                    const badge = document.getElementById('videoBadge');
-                    badge.innerText = '🎬 ' + filename + ' (9:16)';
-                    badge.className = 'file-badge has-file';
-
-                    setTimeout(() => {
-                        switchView('subtitles');
-                    }, 1200);
+                    sendToSubtitles(data.outputPath);
                 } else {
                     prog.error(data.error || "Reframe failed");
                     alert("Error: " + (data.error || "Reframe failed"));
@@ -2353,12 +3083,12 @@ HTML_CONTENT = """<!DOCTYPE html>
             } finally {
                 btn.disabled = false;
                 const textEl = document.getElementById('reframeBtnText');
-                if (textEl) textEl.innerHTML = `💾 <span data-i18n="btnApplyReframe">${I18N[currentLang].btnApplyReframe}</span>`;
+                if (textEl) textEl.innerHTML = `<span data-i18n="btnApplyReframe">${I18N[currentLang].btnApplyReframe}</span>`;
             }
         }
 
         async function exportReframeOnly() {
-            const video = document.getElementById('videoPath').value.trim();
+            const video = getCurrentGlobalVideo();
             if (!video) {
                 alert(currentLang === 'fr' ? "Veuillez sélectionner une vidéo 16:9." : "Please select a 16:9 video first.");
                 return;
@@ -2387,6 +3117,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 saturation: 1.0 + (parseFloat(document.getElementById('saturation').value) / 100.0),
                 brightness: parseFloat(document.getElementById('brightness').value) / 100.0,
                 vignette: parseFloat(document.getElementById('vignette').value) / 100.0,
+                normalize_audio: document.getElementById('chkReframeNormalizeAudio') ? document.getElementById('chkReframeNormalizeAudio').checked : true,
                 previewOnly: false
             };
 
@@ -2398,18 +3129,25 @@ HTML_CONTENT = """<!DOCTYPE html>
                 });
                 const data = await res.json();
                 if (data.success && data.outputPath) {
-                    prog.complete(currentLang === 'fr' ? '🎉 Vidéo 9:16 exportée avec succès !' : '🎉 9:16 Video exported successfully!');
+                    prog.complete(currentLang === 'fr' ? 'Vidéo 9:16 exportée avec succès !' : '9:16 Video exported successfully!');
                     const box = document.getElementById('reframeStatusBox');
                     if (box) {
+                        const safePath = data.outputPath.replace(/\\\\/g, '\\\\\\\\');
                         box.style.display = 'block';
                         box.innerHTML = `
-<div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
-    <div>
-        <span style="color:#4ade80;">✔</span> <b>${I18N[currentLang].reframeExportSuccess}</b><br>
-        <code style="word-break:break-all; font-size:0.85rem; color:var(--text-dim);">${data.outputPath}</code>
-    </div>
-    <button type="button" class="btn-pill" onclick="openFileInExplorer('${data.outputPath.replace(/\\\\/g, '\\\\\\\\')}')" style="flex-shrink:0; display:inline-flex; align-items:center; gap:6px; padding:8px 14px; font-size:0.82rem; font-weight:700; background:rgba(168,85,247,0.25); border:1px solid var(--reframe-accent); color:#fff; border-radius:8px; cursor:pointer;">
-        📁 ${I18N[currentLang].openFolderBtn}
+<div style="margin-bottom:8px;">
+    <b>${I18N[currentLang].reframeExportSuccess}</b><br>
+    <code style="word-break:break-all; font-size:0.82rem; color:var(--text-dim);">${data.outputPath}</code>
+</div>
+<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+    <button type="button" class="btn-pill" onclick="openFileInExplorer('${safePath}')">
+        ${I18N[currentLang].openFolderBtn}
+    </button>
+    <button type="button" class="btn-pill btn-pipeline" onclick="sendToSubtitles('${safePath}')" style="border-color:rgba(0,242,254,0.6); background:rgba(0,242,254,0.15);">
+        Envoyer vers Sous-titres
+    </button>
+    <button type="button" class="btn-pill btn-pipeline" onclick="sendToSmartCut('${safePath}')">
+        Envoyer vers AutoCut
     </button>
 </div>`;
                     }
@@ -2486,6 +3224,47 @@ HTML_CONTENT = """<!DOCTYPE html>
         applyPresetToControls();
         updateReframePreview();
         refreshCacheInfo();
+
+        const engSelect = document.getElementById('smartCutEngine');
+        if (engSelect) {
+            engSelect.addEventListener('change', function() {
+                const llmOpts = document.getElementById('smartCutLlmOptions');
+                if (llmOpts) {
+                    llmOpts.style.display = (this.value === 'llm') ? 'block' : 'none';
+                }
+            });
+        }
+
+        function setupDropZone(boxId, type) {
+            const el = document.getElementById(boxId);
+            if (!el) return;
+            el.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                el.classList.add('dropzone-active');
+            });
+            el.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                el.classList.remove('dropzone-active');
+            });
+            el.addEventListener('drop', (e) => {
+                e.preventDefault();
+                el.classList.remove('dropzone-active');
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    const f = e.dataTransfer.files[0];
+                    const p = f.path || f.name;
+                    if (type === 'srt') {
+                        document.getElementById('srtPath').value = p;
+                        onSrtPathChanged(p);
+                    } else {
+                        setGlobalVideo(p, type);
+                    }
+                }
+            });
+        }
+        setupDropZone('subsVideoBox', 'video');
+        setupDropZone('reframeVideoBox', 'reframe');
+        setupDropZone('smartCutVideoBox', 'smartcut');
+        setupDropZone('srtGroup', 'srt');
     </script>
 </body>
 </html>
@@ -2493,23 +3272,69 @@ HTML_CONTENT = """<!DOCTYPE html>
 
 
 def native_file_picker(file_type="video") -> str:
-    """Opens a native Windows Open File dialog and returns the selected path."""
-    import tkinter as tk
-    from tkinter import filedialog
-    root = tk.Tk()
-    root.withdraw()
-    root.wm_attributes("-topmost", 1)
+    """Opens a native Windows Open File dialog in an isolated STA subprocess."""
+    import platform
+    import subprocess
 
-    if file_type == "video":
-        ft = [("Video Files", "*.mp4;*.mov;*.mkv;*.webm"), ("All Files", "*.*")]
-        title = "Select Video"
-    else:
-        ft = [("Subtitle Files", "*.srt;*.vtt"), ("All Files", "*.*")]
-        title = "Select SRT Subtitle File"
+    if platform.system() == "Windows":
+        try:
+            if file_type in ("video", "reframe_video"):
+                flt = "Fichiers Video (*.mp4;*.mov;*.mkv;*.webm)|*.mp4;*.mov;*.mkv;*.webm|Tous les fichiers (*.*)|*.*"
+                title = "Selectionner une video"
+            elif file_type == "srt":
+                flt = "Fichiers Sous-titres (*.srt;*.vtt)|*.srt;*.vtt|Tous les fichiers (*.*)|*.*"
+                title = "Selectionner un fichier de sous-titres"
+            else:
+                flt = "Tous les fichiers (*.*)|*.*"
+                title = "Selectionner un fichier"
 
-    selected = filedialog.askopenfilename(title=title, filetypes=ft)
-    root.destroy()
-    return selected or ""
+            ps_script = f"""
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Filter = '{flt}'
+$dialog.Title = '{title}'
+$dialog.RestoreDirectory = $true
+$dialog.AutoUpgradeEnabled = $true
+$topForm = New-Object System.Windows.Forms.Form
+$topForm.TopMost = $true
+$topForm.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+if ($dialog.ShowDialog($topForm) -eq [System.Windows.Forms.DialogResult]::OK) {{
+    [Console]::Out.Write($dialog.FileName)
+}}
+$topForm.Dispose()
+$dialog.Dispose()
+"""
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-STA", "-Command", "-"],
+                input=ps_script,
+                capture_output=True,
+                text=True,
+                timeout=180
+            )
+            out = proc.stdout.strip()
+            if out:
+                return out
+        except Exception as e:
+            print(f"[!] native_file_picker STA: {e}")
+
+    # Fallback to Tkinter only if PowerShell STA didn't return a file
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        if file_type in ("video", "reframe_video"):
+            ft = [("Video Files", "*.mp4;*.mov;*.mkv;*.webm"), ("All Files", "*.*")]
+            title = "Select Video"
+        else:
+            ft = [("Subtitle Files", "*.srt;*.vtt"), ("All Files", "*.*")]
+            title = "Select Subtitle File"
+        selected = filedialog.askopenfilename(title=title, filetypes=ft)
+        root.destroy()
+        return selected or ""
+    except Exception:
+        return ""
 
 
 def open_in_file_explorer(target_path: str) -> bool:
@@ -2742,6 +3567,198 @@ class SubHandler(BaseHTTPRequestHandler):
             self._handle_reframe(data)
             return
 
+        elif parsed.path == "/api/smartcut/analyze":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+            self._handle_smartcut_analyze(data)
+            return
+
+        elif parsed.path == "/api/smartcut/render":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8")
+            data = json.loads(body)
+            self._handle_smartcut_render(data)
+            return
+
+    def _handle_smartcut_analyze(self, data: dict):
+        try:
+            video_path = data.get("video", "").strip(' "')
+            if not video_path or not os.path.exists(video_path):
+                self._send_json({"success": False, "error": "Fichier vidéo introuvable."})
+                return
+
+            min_silence = float(data.get("minSilence", 0.5))
+            detect_fillers = bool(data.get("detectFillers", True))
+            detect_stutters = bool(data.get("detectStutters", True))
+            engine = data.get("engine", "heuristic")
+            llm_url = data.get("llmUrl") if engine == "llm" else None
+            llm_model = data.get("llmModel") if engine == "llm" else None
+
+            from transcriber import transcribe_to_words
+            from renderer import get_video_info
+            from autocut import detect_cuts
+            from topic_segmenter import segment_topics
+
+            vinfo = get_video_info(video_path)
+            total_duration = vinfo.get("duration", 0.0)
+
+            words, _ = transcribe_to_words(
+                video_path,
+                model_name="large-v3-turbo",
+                language=None,
+                use_cache=True
+            )
+
+            cuts = detect_cuts(
+                word_timings=words,
+                video_duration=total_duration,
+                min_silence_duration=min_silence,
+                detect_fillers=detect_fillers,
+                detect_stutters=detect_stutters
+            )
+
+            topics = segment_topics(
+                word_timings=words,
+                video_duration=total_duration,
+                engine=engine,
+                api_url=llm_url,
+                model_name=llm_model
+            )
+
+            total_cut_sec = sum(c.duration for c in cuts)
+
+            self._send_json({
+                "success": True,
+                "duration": total_duration,
+                "words_count": len(words),
+                "cuts": [c.to_dict() for c in cuts],
+                "topics": [t.to_dict() for t in topics],
+                "stats": {
+                    "total_cuts": len(cuts),
+                    "total_cut_duration": round(total_cut_sec, 2),
+                    "estimated_new_duration": round(max(0.0, total_duration - total_cut_sec), 2)
+                }
+            })
+        except Exception as e:
+            self._send_json({"success": False, "error": str(e)})
+
+    def _handle_smartcut_render(self, data: dict):
+        try:
+            video_path = data.get("video", "").strip(' "')
+            if not video_path or not os.path.exists(video_path):
+                self._send_json({"success": False, "error": "Fichier vidéo introuvable."})
+                return
+
+            raw_cuts = data.get("cuts", [])
+            selected_topic = data.get("selectedTopic")
+            burn_subs = bool(data.get("burnSubtitles", True))
+            preset_name = data.get("preset", "hormozi")
+
+            from autocut import CutSegment, compute_keep_segments, shift_word_timings_for_cuts, render_autocut_video
+            from renderer import get_video_info, render_subtitles_to_video
+            from transcriber import transcribe_to_words
+            from chunker import group_words_into_chunks
+            from styles import PRESETS, chunks_to_ass
+
+            vinfo = get_video_info(video_path)
+            total_duration = vinfo.get("duration", 0.0)
+
+            cuts = [
+                CutSegment(
+                    id=int(c["id"]),
+                    start=float(c["start"]),
+                    end=float(c["end"]),
+                    duration=float(c["duration"]),
+                    reason=str(c.get("reason", "silence")),
+                    text=str(c.get("text", "")),
+                    enabled=bool(c.get("enabled", True))
+                )
+                for c in raw_cuts
+            ]
+
+            if selected_topic and isinstance(selected_topic, dict):
+                t_start = float(selected_topic.get("start", 0.0))
+                t_end = float(selected_topic.get("end", total_duration))
+                if t_start > 0.05:
+                    cuts.insert(0, CutSegment(
+                        id=999901,
+                        start=0.0,
+                        end=t_start,
+                        duration=t_start,
+                        reason="trim",
+                        text="Hors extrait (début)",
+                        enabled=True
+                    ))
+                if t_end < total_duration - 0.05:
+                    cuts.append(CutSegment(
+                        id=999902,
+                        start=t_end,
+                        end=total_duration,
+                        duration=total_duration - t_end,
+                        reason="trim",
+                        text="Hors extrait (fin)",
+                        enabled=True
+                    ))
+
+            keep_segs = compute_keep_segments(cuts, total_duration)
+            if not keep_segs:
+                self._send_json({"success": False, "error": "Aucun segment conservé (durée nulle)."})
+                return
+
+            base_dir = os.path.dirname(os.path.abspath(video_path))
+            base_name = os.path.splitext(os.path.basename(video_path))[0]
+            tag = f"_extrait{selected_topic.get('id')}" if selected_topic else "_dynamized"
+            cut_output = os.path.join(base_dir, f"{base_name}{tag}_cut.mp4")
+            normalize_audio = bool(data.get("normalize_audio", data.get("normalizeAudio", True)))
+
+            render_autocut_video(
+                input_path=video_path,
+                output_path=cut_output,
+                keep_segments=keep_segs,
+                use_nvenc=True,
+                normalize_audio=normalize_audio
+            )
+
+            final_output = cut_output
+
+            if burn_subs:
+                words, _ = transcribe_to_words(video_path, use_cache=True)
+                shifted_words = shift_word_timings_for_cuts(words, cuts)
+                if shifted_words:
+                    chunks = group_words_into_chunks(shifted_words, max_words=2)
+                    preset = PRESETS.get(preset_name, PRESETS["hormozi"])
+
+                    cut_info = get_video_info(cut_output)
+                    res_w = cut_info.get("width", 1080)
+                    res_h = cut_info.get("height", 1920)
+
+                    ass_path = os.path.splitext(cut_output)[0] + ".ass"
+                    ass_content = chunks_to_ass(chunks, preset, play_res_x=res_w, play_res_y=res_h)
+                    with open(ass_path, "w", encoding="utf-8") as f:
+                        f.write(ass_content)
+
+                    final_subbed = os.path.join(base_dir, f"{base_name}{tag}_subbed.mp4")
+                    render_subtitles_to_video(
+                        video_path=cut_output,
+                        ass_path=ass_path,
+                        output_path=final_subbed,
+                        use_gpu=True,
+                        compress=True,
+                        normalize_audio=normalize_audio
+                    )
+                    final_output = final_subbed
+
+            out_info = get_video_info(final_output)
+            self._send_json({
+                "success": True,
+                "output": final_output,
+                "final_duration": out_info.get("duration", 0.0)
+            })
+
+        except Exception as e:
+            self._send_json({"success": False, "error": str(e)})
+
     def _handle_preview(self, data: dict):
         try:
             video_path = data.get("video", "").strip(' "')
@@ -2848,6 +3865,7 @@ class SubHandler(BaseHTTPRequestHandler):
                     )
 
             compress = data.get("compress", True)
+            normalize_audio = data.get("normalizeAudio", data.get("normalize_audio", True))
             process_reframe(
                 video_path=video_path,
                 output_path=output_path,
@@ -2861,7 +3879,8 @@ class SubHandler(BaseHTTPRequestHandler):
                 duration_limit=dur_limit,
                 use_gpu=True,
                 compress=compress,
-                progress_callback=cb
+                progress_callback=cb,
+                normalize_audio=normalize_audio
             )
 
             if not preview_only:
@@ -2891,6 +3910,7 @@ class SubHandler(BaseHTTPRequestHandler):
         export_sub_files = data.get("exportSubFiles", False)
         keep_raw_reframed = data.get("keepRawReframed", False)
         was_reframed = data.get("wasReframed", False)
+        normalize_audio = data.get("normalizeAudio", True)
 
         if not video_path or not os.path.exists(video_path):
             self._send_json({"success": False, "error": f"Video file not found: '{video_path}'"})
@@ -3024,7 +4044,8 @@ class SubHandler(BaseHTTPRequestHandler):
                     output_path=final_mp4,
                     use_gpu=True,
                     compress=compress,
-                    progress_callback=render_cb
+                    progress_callback=render_cb,
+                    normalize_audio=normalize_audio
                 )
                 log(f"[+] Final video rendered: '{final_mp4}'")
 
@@ -3038,7 +4059,7 @@ class SubHandler(BaseHTTPRequestHandler):
                         log(f"[!] Note: couldn't delete intermediate file '{video_path}': {clean_err}")
 
             set_progress(active=False, job_type="main", percent=100.0, stage="done", message="Export complete!", done=True)
-            log("\n🎉 Done successfully!")
+            log("\n[+] Export termine avec succes!")
             self._send_json({"success": True, "logs": "\n".join(logs), "outputPath": final_mp4})
 
         except Exception as e:
@@ -3099,26 +4120,28 @@ def run_server():
     try:
         server = ThreadedHTTPServer(("127.0.0.1", PORT), SubHandler)
     except OSError:
-        print(f"[!] Port {PORT} in use, clearing previous process...")
+        print(f"[!] Port {PORT} occupe, tentative de liberation...")
         try:
             import subprocess
-            out = subprocess.check_output(f'netstat -ano | findstr :{PORT}', shell=True, text=True)
-            for line in out.strip().splitlines():
-                parts = line.strip().split()
-                if len(parts) >= 5 and f":{PORT}" in parts[1]:
-                    pid = parts[-1]
-                    if pid != str(os.getpid()):
-                        subprocess.run(f"taskkill /f /pid {pid}", shell=True, capture_output=True)
-            time.sleep(0.5)
+            res = subprocess.run(f'netstat -ano | findstr :{PORT}', shell=True, capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout:
+                for line in res.stdout.strip().splitlines():
+                    parts = line.strip().split()
+                    if len(parts) >= 5 and f":{PORT}" in parts[1]:
+                        pid = parts[-1]
+                        if pid.isdigit() and int(pid) != os.getpid():
+                            subprocess.run(f"taskkill /f /pid {pid}", shell=True, capture_output=True)
+                time.sleep(0.5)
             server = ThreadedHTTPServer(("127.0.0.1", PORT), SubHandler)
-        except Exception:
+        except Exception as e:
+            print(f"[!] Impossible de lier au port {PORT} ({e}), assignation d'un port automatique...")
             server = ThreadedHTTPServer(("127.0.0.1", 0), SubHandler)
 
     bound_port = server.server_address[1]
     url = f"http://127.0.0.1:{bound_port}"
     print(f"\n=======================================================")
-    print(f"⚡ Submaxxing Studio Pro is live!")
-    print(f"👉 Open in your browser: {url}")
+    print(f"[*] Submaxxing Studio Pro - Serveur actif")
+    print(f"[*] Interface Web disponible sur : {url}")
     print(f"=======================================================\n")
     try:
         webbrowser.open(url)
@@ -3127,7 +4150,7 @@ def run_server():
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping server.")
+        print("\nArret du serveur.")
 
 
 if __name__ == "__main__":

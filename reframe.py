@@ -22,6 +22,7 @@ from renderer import (
     detect_best_video_encoder,
     run_ffmpeg_with_progress,
     escape_ass_path_for_ffmpeg,
+    has_audio_stream,
 )
 
 _TRAJECTORY_CACHE: Dict[Tuple[str, int, float, Optional[float]], List[Tuple[float, float, bool]]] = {}
@@ -430,7 +431,8 @@ def process_reframe(
     use_gpu: bool = True,
     compress: bool = True,
     crf: int = 22,
-    progress_callback: Optional[Callable[[float, float, float, str], None]] = None
+    progress_callback: Optional[Callable[[float, float, float, str], None]] = None,
+    normalize_audio: bool = False
 ) -> str:
     """
     Executes the 16:9 -> 9:16 conversion using FFmpeg with NVENC hardware acceleration.
@@ -539,7 +541,12 @@ def process_reframe(
         if not is_preview and compress:
             extra_opts += ["-movflags", "+faststart"]
 
-        audio_args = ["-c:a", "copy"] if is_preview else ["-c:a", "aac", "-b:a", "192k"]
+        if is_preview:
+            audio_args = ["-c:a", "copy"]
+        elif normalize_audio and has_audio_stream(video_path):
+            audio_args = ["-af", "loudnorm=I=-14:TP=-0.5:LRA=11", "-c:a", "aac", "-b:a", "192k"]
+        else:
+            audio_args = ["-c:a", "aac", "-b:a", "192k"]
 
         if is_complex:
             cmd = [

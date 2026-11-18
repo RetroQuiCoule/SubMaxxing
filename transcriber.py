@@ -286,20 +286,18 @@ def save_cached_timings(media_path: str, language: Optional[str], model_name: st
         pass
 
 
-def transcribe_video(
+def transcribe_to_words(
     media_path: str,
     model_name: str = "large-v3-turbo",
     language: Optional[str] = "fr",
-    max_words: int = 2,
     device: str = "auto",
     compute_type: str = "auto",
     use_cache: bool = True,
     duration_limit: Optional[float] = None,
     progress_callback: Optional[Callable[[float, float], None]] = None
-) -> Tuple[List[SubChunk], str]:
+) -> Tuple[List[WordTiming], str]:
     """
-    Transcribes media_path directly, extracts word-level timestamps,
-    and returns (chunks, full_srt_string).
+    Transcribes media_path directly and returns (all_word_timings, full_srt_string).
     Uses high-speed greedy decoding (beam_size=1) and caching to eliminate redundant re-runs.
     """
     if not os.path.exists(media_path):
@@ -311,8 +309,7 @@ def transcribe_video(
         if cached:
             all_word_timings, srt_content = cached
             print(f"⚡ [Cache Hit] Réutilisation instantanée de la transcription Whisper ({len(all_word_timings)} mots).")
-            chunks = group_words_into_chunks(all_word_timings, max_words=max_words)
-            return chunks, srt_content
+            return all_word_timings, srt_content
 
     input_audio_path = media_path
     temp_audio_file = None
@@ -360,7 +357,6 @@ def transcribe_video(
                     progress_callback(seg.end, total_audio_sec)
 
         all_word_timings: List[WordTiming] = []
-        srt_lines: List[str] = []
 
         for segment in segment_list:
             if segment.words:
@@ -386,8 +382,9 @@ def transcribe_video(
             if all_word_timings[i].end > all_word_timings[i + 1].start:
                 all_word_timings[i].end = all_word_timings[i + 1].start
 
-        chunks = group_words_into_chunks(all_word_timings, max_words=max_words)
-
+        # Generate standard SRT
+        srt_lines: List[str] = []
+        chunks = group_words_into_chunks(all_word_timings, max_words=2)
         for i, c in enumerate(chunks, start=1):
             text = " ".join(w.word for w in c.words)
             srt_lines.append(f"{i}")
@@ -401,8 +398,7 @@ def transcribe_video(
         if use_cache and not duration_limit:
             save_cached_timings(media_path, language, model_name, all_word_timings, srt_content)
 
-        print(f"[+] Transcription terminée: {len(all_word_timings)} mots, {len(chunks)} paquets.")
-        return chunks, srt_content
+        return all_word_timings, srt_content
 
     finally:
         if temp_audio_file and os.path.exists(temp_audio_file):
@@ -410,3 +406,34 @@ def transcribe_video(
                 os.remove(temp_audio_file)
             except Exception:
                 pass
+
+
+def transcribe_video(
+    media_path: str,
+    model_name: str = "large-v3-turbo",
+    language: Optional[str] = "fr",
+    max_words: int = 2,
+    device: str = "auto",
+    compute_type: str = "auto",
+    use_cache: bool = True,
+    duration_limit: Optional[float] = None,
+    progress_callback: Optional[Callable[[float, float], None]] = None
+) -> Tuple[List[SubChunk], str]:
+    """
+    Transcribes media_path directly, extracts word-level timestamps,
+    and returns (chunks, full_srt_string).
+    """
+    all_word_timings, srt_content = transcribe_to_words(
+        media_path=media_path,
+        model_name=model_name,
+        language=language,
+        device=device,
+        compute_type=compute_type,
+        use_cache=use_cache,
+        duration_limit=duration_limit,
+        progress_callback=progress_callback
+    )
+
+    chunks = group_words_into_chunks(all_word_timings, max_words=max_words)
+    print(f"[+] Transcription terminée: {len(all_word_timings)} mots, {len(chunks)} paquets.")
+    return chunks, srt_content
