@@ -1713,9 +1713,19 @@ HTML_CONTENT = """<!DOCTYPE html>
                             <label style="font-size:0.75rem;">URL Endpoint Ollama :</label>
                             <input type="text" id="smartCutLlmUrl" value="http://localhost:11434/v1" class="text-input" style="width:100%; font-size:0.8rem; padding:6px 10px; background:#0d111a; border:1px solid var(--border); color:#fff; border-radius:6px;">
                         </div>
-                        <div class="form-group" style="margin-bottom:0;">
-                            <label style="font-size:0.75rem;">Modèle Ollama :</label>
-                            <input type="text" id="smartCutLlmModel" value="llama3.2:3b" class="text-input" style="width:100%; font-size:0.8rem; padding:6px 10px; background:#0d111a; border:1px solid var(--border); color:#fff; border-radius:6px;">
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label style="font-size:0.75rem;">Modèle LLM Local :</label>
+                            <select id="smartCutLlmModelSelect" class="select-input" style="width:100%; font-size:0.8rem; padding:6px 10px; background:#0d111a; border:1px solid var(--border); color:#fff; border-radius:6px;" onchange="toggleCustomLlmModel(this.value)">
+                                <option value="qwen2.5:3b" selected>Qwen 2.5 3B (Recommandé • ~2.0 Go VRAM • Idéal Français)</option>
+                                <option value="qwen2.5:7b">Qwen 2.5 7B (Haute Précision • ~4.8 Go VRAM • Pépites & Nuances)</option>
+                                <option value="qwen2.5:1.5b">Qwen 2.5 1.5B (Poids Plume • ~1.2 Go VRAM)</option>
+                                <option value="llama3.2:3b">Llama 3.2 3B (Legacy)</option>
+                                <option value="custom">Autre modèle (personnalisé)...</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="customLlmModelGroup" style="display:none; margin-bottom:0;">
+                            <label style="font-size:0.75rem;">Nom exact du modèle Ollama :</label>
+                            <input type="text" id="smartCutLlmModel" value="qwen2.5:3b" class="text-input" placeholder="ex: mistral:7b, gemma2:2b" style="width:100%; font-size:0.8rem; padding:6px 10px; background:#0d111a; border:1px solid var(--border); color:#fff; border-radius:6px;">
                         </div>
                     </div>
 
@@ -2335,7 +2345,16 @@ HTML_CONTENT = """<!DOCTYPE html>
             const detectFillers = document.getElementById('chkDetectFillers').checked;
             const engine = document.getElementById('smartCutEngine').value;
             const llmUrl = document.getElementById('smartCutLlmUrl').value;
-            const llmModel = document.getElementById('smartCutLlmModel').value;
+            const modelSelect = document.getElementById('smartCutLlmModelSelect');
+            const customInput = document.getElementById('smartCutLlmModel');
+            let llmModel = 'qwen2.5:3b';
+            if (modelSelect) {
+                if (modelSelect.value === 'custom' && customInput) {
+                    llmModel = customInput.value.trim() || 'qwen2.5:3b';
+                } else {
+                    llmModel = modelSelect.value;
+                }
+            }
 
             const btn = document.getElementById('btnRunSmartCutAnalysis');
             btn.disabled = true;
@@ -2526,6 +2545,13 @@ HTML_CONTENT = """<!DOCTYPE html>
                     whisperGroup.style.display = 'none';
                 }
             });
+        }
+
+        function toggleCustomLlmModel(val) {
+            const grp = document.getElementById('customLlmModelGroup');
+            if (grp) {
+                grp.style.display = (val === 'custom') ? 'block' : 'none';
+            }
         }
 
         // Toggle Advanced Accordion
