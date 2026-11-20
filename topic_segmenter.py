@@ -364,7 +364,7 @@ def segment_topics_llm(
     video_duration: float,
     api_url: str = "http://localhost:11434/v1",
     api_key: Optional[str] = None,
-    model_name: str = "qwen2.5:3b",
+    model_name: str = "qwen3.5:4b",
     timeout_sec: int = 25
 ) -> Optional[List[ThematicBlock]]:
     """
@@ -483,7 +483,7 @@ def segment_topics(
             video_duration=video_duration,
             api_url=api_url,
             api_key=api_key,
-            model_name=model_name or "qwen2.5:3b"
+            model_name=model_name or "qwen3.5:4b"
         )
         if blocks:
             return blocks
